@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://dpg-d61639hr0fns73f903ag-a.oregon-postgres.render.com:5432/boraver_o819
+    username: postgresqlvaltermelo_v94m_user
+    password: yZBZ2sTjrqXQi3iQMspKxRm7uOi9gIyd
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+logging:
+  level:
+    org.flywaydb: DEBUG
+    org.springframework.boot.autoconfigure.flyway: DEBUG
+app:
+  security:
+    jwt-secret: 8782028c-93e4-4664-97b1-c1a3c1780032
+    jwt-expiration-ms: 86400000
