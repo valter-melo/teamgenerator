@@ -2,6 +2,7 @@ package com.boraver.teamgenerator.service;
 
 import com.boraver.teamgenerator.dto.match.MatchResultResponse;
 import com.boraver.teamgenerator.dto.match.SaveMatchResultRequest;
+import com.boraver.teamgenerator.dto.match.TeamStats;
 import com.boraver.teamgenerator.model.MatchResult;
 import com.boraver.teamgenerator.model.Player;
 import com.boraver.teamgenerator.repository.MatchResultRepository;
@@ -10,9 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,6 +46,29 @@ public class MatchResultService {
   public List<MatchResultResponse> listResults(UUID tenantId) {
     return matchResultRepository.findByTenantIdOrderByCreatedAtDesc(tenantId)
         .stream().map(this::mapToResponse).toList();
+  }
+
+  public List<TeamStats> getTeamStats(UUID tenantId, LocalDate date) {
+    List<Object[]> results = matchResultRepository.getTeamStats(tenantId, date);
+    return results.stream()
+        .map(row -> new TeamStats(
+            convertSqlArrayToList(row[0]),
+            ((Number) row[1]).longValue()
+        ))
+        .toList();
+  }
+
+  private List<UUID> convertSqlArrayToList(Object arrayObj) {
+    return switch (arrayObj) {
+      case null -> Collections.emptyList();
+
+      // Se for um array Java (UUID[] ou Object[])
+      case UUID[] uuids -> Arrays.asList(uuids);
+      case Object[] objects -> Arrays.stream(objects)
+          .map(obj -> UUID.fromString(obj.toString()))
+          .collect(Collectors.toList());
+      default -> throw new IllegalArgumentException("Tipo inesperado: " + arrayObj.getClass());
+    };
   }
 
   private MatchResultResponse mapToResponse(MatchResult result) {
