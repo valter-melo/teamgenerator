@@ -139,7 +139,6 @@ public class TeamGenerationService {
 
     session = sessionRepo.save(session);
 
-    // Persist teams & players
     for (TeamBucket tb : teams) {
       GeneratedTeam gt = new GeneratedTeam();
       gt.setSessionId(session.getId());
@@ -169,7 +168,6 @@ public class TeamGenerationService {
       }
     }
 
-    // Response
     var respTeams = teams.stream().map(tb ->
         new GenerateTeamsResponse.Team(
             tb.teamIndex,
@@ -184,8 +182,8 @@ public class TeamGenerationService {
             ).toList()
         )
     ).toList();
-    var obj = new GenerateTeamsResponse(session.getId(), respTeams);
-    return obj;
+
+    return new GenerateTeamsResponse(session.getId(), respTeams);
   }
 
   private Map<UUID, Double> computeSkillAverages(

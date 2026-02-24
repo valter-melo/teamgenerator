@@ -41,4 +41,10 @@ public class PlayerController {
   public PlayerResponse update(@PathVariable UUID id, @RequestBody UpdatePlayerRequest req) {
     return service.update(id, req);
   }
+
+  @Operation(summary = "Excluir jogador")
+  @DeleteMapping("/{id}")
+  public void delete(@PathVariable UUID id) {
+    service.delete(id);
+  }
 }

@@ -42,11 +42,27 @@ public class PlayerService {
 
   @Transactional
   public PlayerResponse update(UUID id, UpdatePlayerRequest req) {
-    Player p = repo.findByIdAndTenantId(id, tenantId()).orElseThrow(() -> new IllegalArgumentException("Player not found"));
-    if (req.name() != null) p.setName(req.name());
-    if (req.sex() != null && (req.sex().equals("M") || req.sex().equals("F"))) p.setSex(req.sex().charAt(0));
-    if (req.active() != null) p.setActive(req.active());
-    return toResponse(repo.save(p));
+    UUID tenant = tenantId();
+    Player player = repo.findByIdAndTenantId(id, tenant)
+        .orElseThrow(() -> new RuntimeException("Jogador não encontrado"));
+
+    if (req.name() != null) {
+      player.setName(req.name());
+    }
+    if (req.sex() != null) {
+      player.setSex(req.sex().charAt(0));
+    }
+    if (req.active() != null) {
+      player.setActive(req.active()); // atualiza o status
+    }
+
+    repo.save(player);
+    return new PlayerResponse(player.getId(), player.getName(), String.valueOf(player.getSex()), player.isActive());
+  }
+
+  @Transactional
+  public void delete(UUID id) {
+    repo.deleteById(id);
   }
 
   private PlayerResponse toResponse(Player p) {
