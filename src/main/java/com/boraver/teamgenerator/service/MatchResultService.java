@@ -27,19 +27,22 @@ public class MatchResultService {
   public MatchResultResponse saveResult(UUID tenantId, SaveMatchResultRequest request) {
     Set<Player> winningTeam = playerRepository.findAllById(request.getWinningPlayerIds())
         .stream().collect(Collectors.toSet());
+    Set<Player> losingTeam = playerRepository.findAllById(request.getLosingPlayerIds())
+        .stream().collect(Collectors.toSet());
 
-    if (winningTeam.size() != request.getWinningPlayerIds().size()) {
+    if (winningTeam.size() != request.getWinningPlayerIds().size() ||
+        losingTeam.size() != request.getLosingPlayerIds().size()) {
       throw new IllegalArgumentException("Alguns jogadores não foram encontrados");
     }
 
     MatchResult result = new MatchResult();
     result.setTenantId(tenantId);
     result.setWinningTeam(winningTeam);
+    result.setLosingTeam(losingTeam);
     result.setTeamScore(request.getTeamScore());
     result.setOpponentScore(request.getOpponentScore());
 
     MatchResult saved = matchResultRepository.save(result);
-
     return mapToResponse(saved);
   }
 
@@ -55,6 +58,13 @@ public class MatchResultService {
             convertSqlArrayToList(row[0]),
             ((Number) row[1]).longValue()
         ))
+        .toList();
+  }
+
+  public List<MatchResultResponse> getHistory(UUID tenantId) {
+    return matchResultRepository.findByTenantIdOrderByCreatedAtDesc(tenantId)
+        .stream()
+        .map(this::mapToResponse)
         .toList();
   }
 
@@ -76,6 +86,7 @@ public class MatchResultService {
         .id(result.getId())
         .createdAt(result.getCreatedAt())
         .winningPlayerIds(result.getWinningTeam().stream().map(Player::getId).collect(Collectors.toSet()))
+        .losingPlayerIds(result.getLosingTeam().stream().map(Player::getId).collect(Collectors.toSet()))
         .teamScore(result.getTeamScore())
         .opponentScore(result.getOpponentScore())
         .build();

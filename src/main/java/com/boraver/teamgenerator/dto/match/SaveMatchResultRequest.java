@@ -9,7 +9,9 @@ import java.util.UUID;
 @Data
 public class SaveMatchResultRequest {
   @NotNull
-  private Set<UUID> winningPlayerIds; // IDs dos jogadores do time vencedor
+  private Set<UUID> winningPlayerIds;
+  @NotNull
+  private Set<UUID> losingPlayerIds;
   private int teamScore;
   private int opponentScore;
 }

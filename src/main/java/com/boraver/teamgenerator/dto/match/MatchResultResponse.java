@@ -13,6 +13,7 @@ public class MatchResultResponse {
   private UUID id;
   private LocalDateTime createdAt;
   private Set<UUID> winningPlayerIds;
+  private Set<UUID> losingPlayerIds;
   private int teamScore;
   private int opponentScore;
 }

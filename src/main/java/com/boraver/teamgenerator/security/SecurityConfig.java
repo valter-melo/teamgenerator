@@ -31,7 +31,12 @@ public class SecurityConfig {
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-            .requestMatchers("/auth/**").permitAll()
+            .requestMatchers(
+                "/auth/**",
+                "/v3/api-docs/**",
+                "/swagger-ui/**",
+                "/swagger-ui.html"
+                ).permitAll()
             .anyRequest().authenticated()
         )
         .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)

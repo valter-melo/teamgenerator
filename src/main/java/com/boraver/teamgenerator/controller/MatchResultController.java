@@ -47,4 +47,10 @@ public class MatchResultController {
     LocalDate targetDate = date != null ? date : LocalDate.now();
     return matchResultService.getTeamStats(tenantId, targetDate);
   }
+
+  @GetMapping("/history")
+  public List<MatchResultResponse> getHistory(Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    return matchResultService.getHistory(tenantId);
+  }
 }

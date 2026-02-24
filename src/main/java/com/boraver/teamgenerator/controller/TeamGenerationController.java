@@ -1,6 +1,8 @@
 package com.boraver.teamgenerator.controller;
 
+import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.teams.*;
+import com.boraver.teamgenerator.service.GameSessionService;
 import com.boraver.teamgenerator.service.TeamGenerationService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -13,14 +15,22 @@ import java.util.UUID;
 public class TeamGenerationController {
 
   private final TeamGenerationService service;
+  private final GameSessionService gameSessionService;
 
-  public TeamGenerationController(TeamGenerationService service) {
+  public TeamGenerationController(TeamGenerationService service, GameSessionService gameSessionService) {
     this.service = service;
+    this.gameSessionService = gameSessionService;
   }
 
   @PostMapping("/generate/db")
   public GenerateTeamsResponse generateFromDb(@Valid @RequestBody GenerateTeamsRequest req, Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
     UUID userId = (UUID) auth.getPrincipal();
+
+    if (gameSessionService.hasActiveSession(tenantId)) {
+      throw new IllegalStateException("Não é possível gerar novos times enquanto uma sessão de jogos está em andamento.");
+    }
+
     return service.generateFromDb(req, userId);
   }
 }

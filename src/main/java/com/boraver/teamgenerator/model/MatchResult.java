@@ -32,6 +32,14 @@ public class MatchResult {
   )
   private Set<Player> winningTeam = new HashSet<>();
 
+  @ManyToMany
+  @JoinTable(
+      name = "match_losing_players",
+      joinColumns = @JoinColumn(name = "match_result_id"),
+      inverseJoinColumns = @JoinColumn(name = "player_id")
+  )
+  private Set<Player> losingTeam = new HashSet<>();
+
   private int teamScore; // pontuação do time vencedor no set final
   private int opponentScore; // pontuação do adversário
 }
