@@ -1,4 +1,4 @@
-package com.boraver.teamgenerator.model;
+package com.boraver.teamgenerator.entity;
 
 import jakarta.persistence.*;
 import java.util.UUID;

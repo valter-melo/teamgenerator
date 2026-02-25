@@ -1,7 +1,7 @@
 package com.boraver.teamgenerator.service;
 
 import com.boraver.teamgenerator.dto.teams.SaveGeneratedTeamsRequest;
-import com.boraver.teamgenerator.model.GeneratedTeams;
+import com.boraver.teamgenerator.entity.GeneratedTeams;
 import com.boraver.teamgenerator.repository.GeneratedTeamsRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

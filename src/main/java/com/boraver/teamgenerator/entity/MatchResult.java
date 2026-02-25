@@ -1,4 +1,4 @@
-package com.boraver.teamgenerator.model;
+package com.boraver.teamgenerator.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -39,6 +39,10 @@ public class MatchResult {
       inverseJoinColumns = @JoinColumn(name = "player_id")
   )
   private Set<Player> losingTeam = new HashSet<>();
+
+  @ManyToOne
+  @JoinColumn(name = "team_generation_id")
+  private TeamGenerationSession teamGenerationSession;
 
   private int teamScore; // pontuação do time vencedor no set final
   private int opponentScore; // pontuação do adversário

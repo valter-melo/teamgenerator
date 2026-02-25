@@ -2,7 +2,7 @@ package com.boraver.teamgenerator.service;
 
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.player.*;
-import com.boraver.teamgenerator.model.Player;
+import com.boraver.teamgenerator.entity.Player;
 import com.boraver.teamgenerator.repository.PlayerRepository;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;

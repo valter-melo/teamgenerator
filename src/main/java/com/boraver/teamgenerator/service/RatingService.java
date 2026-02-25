@@ -2,7 +2,7 @@ package com.boraver.teamgenerator.service;
 
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.rating.*;
-import com.boraver.teamgenerator.model.PlayerSkillRating;
+import com.boraver.teamgenerator.entity.PlayerSkillRating;
 import com.boraver.teamgenerator.repository.PlayerRepository;
 import com.boraver.teamgenerator.repository.RatingRepository;
 import com.boraver.teamgenerator.repository.SkillRepository;

@@ -39,13 +39,15 @@ public class MatchResultController {
   }
 
   @GetMapping("/stats")
-  public List<TeamStats> getStats(
-      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-      Authentication auth
-  ) {
+  public List<TeamStats> getStats(Authentication auth) {
     UUID tenantId = UUID.fromString(TenantContext.getTenantId());
-    LocalDate targetDate = date != null ? date : LocalDate.now();
-    return matchResultService.getTeamStats(tenantId, targetDate);
+    return matchResultService.getStatsFromActiveGameSession(tenantId);
+  }
+
+  @GetMapping("/stats/active")
+  public List<TeamStats> getStatsForActiveSession(Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    return matchResultService.getStatsFromActiveGameSession(tenantId);
   }
 
   @GetMapping("/history")

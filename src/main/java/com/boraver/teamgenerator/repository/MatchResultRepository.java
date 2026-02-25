@@ -1,6 +1,6 @@
 package com.boraver.teamgenerator.repository;
 
-import com.boraver.teamgenerator.model.MatchResult;
+import com.boraver.teamgenerator.entity.MatchResult;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,4 +32,28 @@ public interface MatchResultRepository extends JpaRepository<MatchResult, UUID> 
     ORDER BY wins DESC
     """, nativeQuery = true)
   List<Object[]> getTeamStats(@Param("tenantId") UUID tenantId, @Param("date") LocalDate date);
+
+  @Query(value = """
+    WITH player_arrays AS (
+            SELECT
+                mr.id,
+                array_agg(mrp.player_id ORDER BY mrp.player_id) AS player_ids,
+                (mr.team_score - mr.opponent_score) AS point_diff,
+                CASE WHEN mr.team_score > mr.opponent_score THEN 1 ELSE 0 END AS win_flag
+            FROM match_results mr
+            JOIN match_result_players mrp ON mr.id = mrp.match_result_id
+            JOIN team_generation_session tgs ON tgs.id = mr.team_generation_id
+            JOIN game_sessions gs ON gs.id = tgs.session_id
+            WHERE mr.tenant_id = :tenantId AND gs.active = true
+            GROUP BY mr.id, mr.team_score, mr.opponent_score
+        )
+        SELECT
+            player_ids,
+            SUM(win_flag) AS wins,
+            SUM(point_diff) AS total_point_diff
+        FROM player_arrays
+        GROUP BY player_ids
+        ORDER BY wins DESC, total_point_diff DESC
+    """, nativeQuery = true)
+  List<Object[]> getTeamStatsFromActiveGameSession(@Param("tenantId") UUID tenantId);
 }

@@ -14,4 +14,5 @@ public class SaveMatchResultRequest {
   private Set<UUID> losingPlayerIds;
   private int teamScore;
   private int opponentScore;
+  private UUID teamGenerationId;
 }

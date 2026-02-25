@@ -2,7 +2,7 @@ package com.boraver.teamgenerator.service;
 
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.skill.*;
-import com.boraver.teamgenerator.model.Skill;
+import com.boraver.teamgenerator.entity.Skill;
 import com.boraver.teamgenerator.repository.SkillRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,12 +1,16 @@
-package com.boraver.teamgenerator.model;
+package com.boraver.teamgenerator.entity;
 
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name="player")
-public class Player {
+@Table(
+    name = "app_user",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "email"})
+)
+public class AppUser {
+
   @Id @GeneratedValue
   private UUID id;
 
@@ -16,8 +20,14 @@ public class Player {
   @Column(nullable=false, length=120)
   private String name;
 
-  @Column(nullable=false, length=1)
-  private char sex; // M/F
+  @Column(nullable=false, length=180)
+  private String email;
+
+  @Column(name="password_hash", nullable=false, length=255)
+  private String passwordHash;
+
+  @Column(nullable=false, length=30)
+  private String role = "ADMIN";
 
   @Column(nullable=false)
   private boolean active = true;
@@ -26,12 +36,22 @@ public class Player {
   private OffsetDateTime createdAt = OffsetDateTime.now();
 
   public UUID getId() { return id; }
+
   public UUID getTenantId() { return tenantId; }
   public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }
+
   public String getName() { return name; }
   public void setName(String name) { this.name = name; }
-  public char getSex() { return sex; }
-  public void setSex(char sex) { this.sex = sex; }
+
+  public String getEmail() { return email; }
+  public void setEmail(String email) { this.email = email; }
+
+  public String getPasswordHash() { return passwordHash; }
+  public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+
+  public String getRole() { return role; }
+  public void setRole(String role) { this.role = role; }
+
   public boolean isActive() { return active; }
   public void setActive(boolean active) { this.active = active; }
 }

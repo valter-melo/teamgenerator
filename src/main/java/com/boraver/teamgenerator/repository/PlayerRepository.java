@@ -1,6 +1,6 @@
 package com.boraver.teamgenerator.repository;
 
-import com.boraver.teamgenerator.model.*;
+import com.boraver.teamgenerator.entity.*;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.*;
 import java.util.*;

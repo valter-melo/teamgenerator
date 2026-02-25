@@ -1,10 +1,9 @@
 package com.boraver.teamgenerator.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.teams.*;
-import com.boraver.teamgenerator.model.*;
+import com.boraver.teamgenerator.entity.*;
 import com.boraver.teamgenerator.repository.*;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;

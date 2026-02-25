@@ -3,15 +3,18 @@ package com.boraver.teamgenerator.service;
 import com.boraver.teamgenerator.dto.match.MatchResultResponse;
 import com.boraver.teamgenerator.dto.match.SaveMatchResultRequest;
 import com.boraver.teamgenerator.dto.match.TeamStats;
-import com.boraver.teamgenerator.model.MatchResult;
-import com.boraver.teamgenerator.model.Player;
+import com.boraver.teamgenerator.entity.GameSession;
+import com.boraver.teamgenerator.entity.MatchResult;
+import com.boraver.teamgenerator.entity.Player;
+import com.boraver.teamgenerator.entity.TeamGenerationSession;
+import com.boraver.teamgenerator.repository.GameSessionRepository;
 import com.boraver.teamgenerator.repository.MatchResultRepository;
 import com.boraver.teamgenerator.repository.PlayerRepository;
+import com.boraver.teamgenerator.repository.TeamGenerationSessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,13 +25,23 @@ public class MatchResultService {
 
   private final MatchResultRepository matchResultRepository;
   private final PlayerRepository playerRepository;
+  private final TeamGenerationSessionRepository sessionRepository;
+  private final GameSessionRepository gameSessionRepository;;
 
   @Transactional
   public MatchResultResponse saveResult(UUID tenantId, SaveMatchResultRequest request) {
-    Set<Player> winningTeam = playerRepository.findAllById(request.getWinningPlayerIds())
-        .stream().collect(Collectors.toSet());
-    Set<Player> losingTeam = playerRepository.findAllById(request.getLosingPlayerIds())
-        .stream().collect(Collectors.toSet());
+    Optional<GameSession> gameSession = gameSessionRepository.findByTenantIdAndActiveTrue(tenantId);
+
+    TeamGenerationSession teamGeneration = sessionRepository.findByGameSessionId(gameSession.get().getId())
+        .orElseThrow(() -> new RuntimeException("Sessão de geração de times não encontrada"));
+
+    // Verificar se a sessão pertence ao tenant (opcional, mas recomendado)
+    if (!teamGeneration.getTenantId().equals(tenantId)) {
+      throw new RuntimeException("Sessão não pertence ao tenant");
+    }
+
+    Set<Player> winningTeam = new HashSet<>(playerRepository.findAllById(request.getWinningPlayerIds()));
+    Set<Player> losingTeam = new HashSet<>(playerRepository.findAllById(request.getLosingPlayerIds()));
 
     if (winningTeam.size() != request.getWinningPlayerIds().size() ||
         losingTeam.size() != request.getLosingPlayerIds().size()) {
@@ -41,6 +54,7 @@ public class MatchResultService {
     result.setLosingTeam(losingTeam);
     result.setTeamScore(request.getTeamScore());
     result.setOpponentScore(request.getOpponentScore());
+    result.setTeamGenerationSession(teamGeneration);
 
     MatchResult saved = matchResultRepository.save(result);
     return mapToResponse(saved);
@@ -56,7 +70,19 @@ public class MatchResultService {
     return results.stream()
         .map(row -> new TeamStats(
             convertSqlArrayToList(row[0]),
-            ((Number) row[1]).longValue()
+            ((Number) row[1]).longValue(),
+            ((Number) row[2]).longValue()
+        ))
+        .toList();
+  }
+
+  public List<TeamStats> getStatsFromActiveGameSession(UUID tenantId) {
+    List<Object[]> results = matchResultRepository.getTeamStatsFromActiveGameSession(tenantId);
+    return results.stream()
+        .map(row -> new TeamStats(
+            convertSqlArrayToList(row[0]),
+            ((Number) row[1]).longValue(),
+            ((Number) row[2]).longValue()
         ))
         .toList();
   }

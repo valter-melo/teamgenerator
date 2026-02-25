@@ -5,5 +5,6 @@ import java.util.UUID;
 
 public record TeamStats(
     List<UUID> playerIds,
-    long wins
+    long wins,
+    long pointDiff
 ) {}
