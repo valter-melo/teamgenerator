@@ -5,6 +5,7 @@ import com.boraver.teamgenerator.dto.teams.*;
 import com.boraver.teamgenerator.service.GameSessionService;
 import com.boraver.teamgenerator.service.TeamGenerationService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,5 +33,16 @@ public class TeamGenerationController {
     }
 
     return service.generateFromDb(req, userId);
+  }
+
+  @PostMapping("/generate-from-pots")
+  public ResponseEntity<SaveGeneratedResponse> saveGenerated(
+      @Valid @RequestBody SaveGeneratedRequest request,
+      Authentication auth
+  ) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    UUID userId = (UUID) auth.getPrincipal();
+    SaveGeneratedResponse response = service.generateFromPots(tenantId, userId, request);
+    return ResponseEntity.ok(response);
   }
 }

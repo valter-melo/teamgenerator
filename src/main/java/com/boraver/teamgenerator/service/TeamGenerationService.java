@@ -6,20 +6,23 @@ import com.boraver.teamgenerator.dto.teams.*;
 import com.boraver.teamgenerator.entity.*;
 import com.boraver.teamgenerator.repository.*;
 import jakarta.transaction.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class TeamGenerationService {
 
-  private final PlayerRepository playerRepo;
-  private final RatingRepository ratingRepo;
-  private final TeamSessionRepository sessionRepo;
-  private final GeneratedTeamRepository teamRepo;
-  private final GeneratedTeamPlayerRepository teamPlayerRepo;
+  private final PlayerRepository playerRepository;
+  private final RatingRepository ratingRepository;
+  private final TeamSessionRepository sessionRepository;
+  private final GeneratedTeamRepository teamRepository;
+  private final GeneratedTeamPlayerRepository teamPlayerRepository;
   private final ObjectMapper mapper;
+  private final JdbcTemplate jdbcTemplate;
 
   public TeamGenerationService(
       PlayerRepository playerRepo,
@@ -27,14 +30,16 @@ public class TeamGenerationService {
       TeamSessionRepository sessionRepo,
       GeneratedTeamRepository teamRepo,
       GeneratedTeamPlayerRepository teamPlayerRepo,
-      ObjectMapper mapper
+      ObjectMapper mapper,
+      JdbcTemplate jdbcTemplate
   ) {
-    this.playerRepo = playerRepo;
-    this.ratingRepo = ratingRepo;
-    this.sessionRepo = sessionRepo;
-    this.teamRepo = teamRepo;
-    this.teamPlayerRepo = teamPlayerRepo;
+    this.playerRepository = playerRepo;
+    this.ratingRepository = ratingRepo;
+    this.sessionRepository = sessionRepo;
+    this.teamRepository = teamRepo;
+    this.teamPlayerRepository = teamPlayerRepo;
     this.mapper = mapper;
+    this.jdbcTemplate = jdbcTemplate;
   }
 
   private UUID tenantId() {
@@ -57,8 +62,7 @@ public class TeamGenerationService {
       throw new IllegalArgumentException("selectedSkills cannot be empty");
     }
 
-    // Carrega jogadores do tenant (ativos)
-    List<Player> players = playerRepo.findAllByTenantIdAndIdIn(tenant, req.playerIds())
+    List<Player> players = playerRepository.findAllByTenantIdAndIdIn(tenant, req.playerIds())
         .stream()
         .filter(Player::isActive)
         .toList();
@@ -70,7 +74,7 @@ public class TeamGenerationService {
     List<UUID> playerIds = players.stream().map(Player::getId).toList();
     List<UUID> skillIds = req.selectedSkills().stream().map(GenerateTeamsRequest.SelectedSkill::skillId).toList();
 
-    var ratings = ratingRepo.findCurrentRatings(tenant, playerIds, skillIds);
+    var ratings = ratingRepository.findCurrentRatings(tenant, playerIds, skillIds);
 
     Map<UUID, Map<UUID, Integer>> ratingMap = new HashMap<>();
     for (var r : ratings) {
@@ -136,14 +140,14 @@ public class TeamGenerationService {
     session.setPlayersCount(needed);
     session.setRulesJson(mapper.valueToTree(req));
 
-    session = sessionRepo.save(session);
+    session = sessionRepository.save(session);
 
     for (TeamBucket tb : teams) {
       GeneratedTeam gt = new GeneratedTeam();
       gt.setSessionId(session.getId());
       gt.setTeamIndex(tb.teamIndex);
       gt.setName("Time " + tb.teamIndex);
-      gt = teamRepo.save(gt);
+      gt = teamRepository.save(gt);
 
       for (ScoredPlayer sp : tb.players) {
         GeneratedTeamPlayer gtp = new GeneratedTeamPlayer();
@@ -163,7 +167,7 @@ public class TeamGenerationService {
         snap.set("ratingsUsed", ratingsSnap);
         gtp.setSnapshotJson(snap);
 
-        teamPlayerRepo.save(gtp);
+        teamPlayerRepository.save(gtp);
       }
     }
 
@@ -183,6 +187,87 @@ public class TeamGenerationService {
     ).toList();
 
     return new GenerateTeamsResponse(session.getId(), respTeams);
+  }
+
+  @Transactional
+  public SaveGeneratedResponse generateFromPots(UUID tenantId, UUID userId, SaveGeneratedRequest request) {
+    if (request.teams() == null || request.teams().isEmpty()) {
+      throw new IllegalArgumentException("Nenhum time enviado.");
+    }
+
+    int teamCount = request.teams().size();
+    int playersPerTeam = request.teams().get(0).players().size(); // assume que todos os times têm o mesmo número de jogadores
+
+    // Coletar todos os IDs de jogadores
+    List<UUID> allPlayerIds = request.teams().stream()
+        .flatMap(t -> t.players().stream())
+        .map(p -> UUID.fromString(p.id()))
+        .collect(Collectors.toList());
+
+    // Validar que todos os jogadores existem e pertencem ao tenant
+    List<Player> players = playerRepository.findAllByIdInAndTenantId(allPlayerIds, tenantId);
+    if (players.size() != allPlayerIds.size()) {
+      throw new IllegalArgumentException("Alguns jogadores não foram encontrados ou não pertencem ao tenant.");
+    }
+
+    // Criar a sessão de geração
+    TeamGenerationSession session = new TeamGenerationSession();
+    session.setTenantId(tenantId);
+    session.setMode("MANUAL");
+    session.setCreatedBy(userId);
+    session.setTeamCount(teamCount);
+    session.setPlayersPerTeam(playersPerTeam);
+    session.setPlayersCount(teamCount * playersPerTeam);
+    try {
+      session.setRulesJson(mapper.valueToTree(request));
+    } catch (Exception e) {
+      // log
+    }
+    session = sessionRepository.save(session);
+
+    // Para cada time, criar GeneratedTeam e GeneratedTeamPlayer
+    List<GenerateTeamsResponse.Team> teamDtos = new ArrayList<>();
+    for (SaveGeneratedRequest.TeamDTO teamDto : request.teams()) {
+      GeneratedTeam gt = new GeneratedTeam();
+      gt.setSessionId(session.getId());
+      gt.setTeamIndex(teamDto.teamIndex());
+      gt.setName("Time " + teamDto.teamIndex());
+      gt = teamRepository.save(gt);
+
+      double sumScore = 0;
+      List<GenerateTeamsResponse.PlayerPick> picks = new ArrayList<>();
+      for (SaveGeneratedRequest.PlayerPickDTO playerDto : teamDto.players()) {
+        GeneratedTeamPlayer gtp = new GeneratedTeamPlayer();
+        gtp.setTeamId(gt.getId());
+        gtp.setPlayerId(UUID.fromString(playerDto.id()));
+        gtp.setSexAtGeneration(playerDto.sex());
+        gtp.setScoreAtGeneration(BigDecimal.valueOf(playerDto.score()));
+
+        // Criar snapshot simples (obrigatório)
+        var snap = mapper.createObjectNode();
+        snap.put("method", "manual");
+        snap.put("source", "pote_selection");
+        gtp.setSnapshotJson(snap);
+
+        teamPlayerRepository.save(gtp);
+
+        picks.add(new GenerateTeamsResponse.PlayerPick(
+            UUID.fromString(playerDto.id()),
+            playerDto.name(),
+            playerDto.sex(),
+            playerDto.score()
+        ));
+        sumScore += playerDto.score();
+      }
+
+      teamDtos.add(new GenerateTeamsResponse.Team(
+          teamDto.teamIndex(),
+          sumScore,
+          picks
+      ));
+    }
+
+    return new SaveGeneratedResponse(session.getId(), teamDtos);
   }
 
   private Map<UUID, Double> computeSkillAverages(

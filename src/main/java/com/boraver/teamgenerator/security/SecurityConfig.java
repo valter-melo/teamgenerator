@@ -3,6 +3,7 @@ package com.boraver.teamgenerator.security;
 import org.springframework.context.annotation.*;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,7 +27,7 @@ public class SecurityConfig {
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwtService) throws Exception {
     return http
-        .csrf(csrf -> csrf.disable())
+        .csrf(AbstractHttpConfigurer::disable)
         .cors(Customizer.withDefaults())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
