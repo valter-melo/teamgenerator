@@ -3,6 +3,8 @@ package com.boraver.teamgenerator.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -13,14 +15,17 @@ import java.util.UUID;
 @Table(name = "match_results")
 @Data
 public class MatchResult {
-
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(nullable = false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
+  @Column(name = "created_at", nullable = false)
   @CreationTimestamp
   private LocalDateTime createdAt;
 
@@ -44,6 +49,6 @@ public class MatchResult {
   @JoinColumn(name = "team_generation_id")
   private TeamGenerationSession teamGenerationSession;
 
-  private int teamScore; // pontuação do time vencedor no set final
-  private int opponentScore; // pontuação do adversário
+  private int teamScore;
+  private int opponentScore;
 }

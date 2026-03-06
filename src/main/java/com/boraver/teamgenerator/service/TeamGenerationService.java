@@ -138,7 +138,7 @@ public class TeamGenerationService {
     session.setTeamCount(req.teamCount());
     session.setPlayersPerTeam(req.playersPerTeam());
     session.setPlayersCount(needed);
-    session.setRulesJson(mapper.valueToTree(req));
+    session.setRulesJson(mapper.valueToTree(req).toString());
 
     session = sessionRepository.save(session);
 
@@ -165,7 +165,7 @@ public class TeamGenerationService {
           ratingsSnap.put(entry.getKey().toString(), entry.getValue());
         }
         snap.set("ratingsUsed", ratingsSnap);
-        gtp.setSnapshotJson(snap);
+        gtp.setSnapshotJson(snap.toString());
 
         teamPlayerRepository.save(gtp);
       }
@@ -219,7 +219,7 @@ public class TeamGenerationService {
     session.setPlayersPerTeam(playersPerTeam);
     session.setPlayersCount(teamCount * playersPerTeam);
     try {
-      session.setRulesJson(mapper.valueToTree(request));
+      session.setRulesJson(mapper.valueToTree(request).toString());
     } catch (Exception e) {
       // log
     }
@@ -247,7 +247,7 @@ public class TeamGenerationService {
         var snap = mapper.createObjectNode();
         snap.put("method", "manual");
         snap.put("source", "pote_selection");
-        gtp.setSnapshotJson(snap);
+        gtp.setSnapshotJson(snap.toString());
 
         teamPlayerRepository.save(gtp);
 

@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE tenant (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(120) NOT NULL,
+  slug VARCHAR(80) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -34,7 +35,6 @@ CREATE INDEX idx_player_tenant_active ON player(tenant_id, active);
 CREATE TABLE skill (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-  code VARCHAR(40) NOT NULL,
   name VARCHAR(120) NOT NULL,
   active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -93,3 +93,26 @@ CREATE TABLE generated_team_player (
 );
 
 CREATE INDEX idx_team_player_team ON generated_team_player(team_id);
+
+CREATE TABLE match_results (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    team_score INTEGER NOT NULL,
+    opponent_score INTEGER NOT NULL,
+    session_id UUID NOT NULL
+);
+
+-- Tabela de relacionamento entre resultados e jogadores do time vencedor
+CREATE TABLE match_result_players (
+    match_result_id UUID NOT NULL,
+    player_id UUID NOT NULL,
+    PRIMARY KEY (match_result_id, player_id),
+    FOREIGN KEY (match_result_id) REFERENCES match_results(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES player(id) ON DELETE CASCADE
+);
+
+-- Índices para consultas comuns
+CREATE INDEX idx_match_results_tenant_id ON match_results(tenant_id);
+CREATE INDEX idx_match_results_created_at ON match_results(created_at);
+CREATE INDEX idx_match_result_players_player_id ON match_result_players(player_id);

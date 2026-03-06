@@ -15,18 +15,21 @@ import java.util.UUID;
 @Getter
 @Setter
 public class TeamGenerationSession {
-
   @Id
-  @GeneratedValue
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(name="tenant_id", nullable=false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
   @Column(nullable=false, length=10)
   private String mode; // TXT / DB
 
   @Column(name="created_by")
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID createdBy;
 
   @Column(name="created_at", nullable=false)
@@ -42,8 +45,8 @@ public class TeamGenerationSession {
   private int playersCount;
 
   @JdbcTypeCode(SqlTypes.JSON)
-  @Column(name="rules_json", nullable=false, columnDefinition="jsonb")
-  private JsonNode rulesJson; // <-- trocou aqui
+  @Column(name="rules_json", nullable=false, columnDefinition="json")
+  private String rulesJson;
 
   @Column(name="source_file_name")
   private String sourceFileName;

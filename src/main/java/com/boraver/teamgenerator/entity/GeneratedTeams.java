@@ -13,19 +13,21 @@ import java.util.UUID;
 @Table(name = "generated_teams")
 @Data
 public class GeneratedTeams {
-
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(nullable = false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
   @CreationTimestamp
   private LocalDateTime createdAt;
 
   @JdbcTypeCode(SqlTypes.JSON)
-  @Column(columnDefinition = "jsonb", nullable = false)
+  @Column(columnDefinition = "json", nullable = false)
   private String teamsJson;
 
   private boolean active = true;

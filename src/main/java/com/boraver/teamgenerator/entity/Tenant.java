@@ -3,6 +3,8 @@ package com.boraver.teamgenerator.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -15,7 +17,10 @@ import java.util.UUID;
         @UniqueConstraint(columnNames = {"slug"})
     })
 public class Tenant {
-  @Id @GeneratedValue
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
   @Column(nullable = false, length = 120)

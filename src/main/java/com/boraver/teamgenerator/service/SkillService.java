@@ -23,7 +23,6 @@ public class SkillService {
   public SkillResponse create(CreateSkillRequest req) {
     Skill s = new Skill();
     s.setTenantId(tenantId());
-    s.setCode(req.code().trim().toUpperCase());
     s.setName(req.name().trim());
     s = repo.save(s);
     return toResponse(s);
@@ -41,13 +40,11 @@ public class SkillService {
   @Transactional
   public SkillResponse update(UUID id, UpdateSkillRequest req) {
     Skill s = repo.findByIdAndTenantId(id, tenantId()).orElseThrow(() -> new IllegalArgumentException("Skill not found"));
-    if (req.code() != null) s.setCode(req.code().trim().toUpperCase());
-    if (req.name() != null) s.setName(req.name().trim());
     if (req.active() != null) s.setActive(req.active());
     return toResponse(repo.save(s));
   }
 
   private SkillResponse toResponse(Skill s) {
-    return new SkillResponse(s.getId(), s.getCode(), s.getName(), s.isActive());
+    return new SkillResponse(s.getId(), s.getName(), s.isActive());
   }
 }

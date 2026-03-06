@@ -1,11 +1,15 @@
 spring:
   datasource:
-    url: jdbc:postgresql://dpg-d61639hr0fns73f903ag-a.oregon-postgres.render.com:5432/boraver_o819
-    username: postgresqlvaltermelo_v94m_user
-    password: yZBZ2sTjrqXQi3iQMspKxRm7uOi9gIyd
+    url: jdbc:mysql://boraver.mysql.dbaas.com.br:3306/boraver?useSSL=false&serverTimezone=UTC&createDatabaseIfNotExist=true
+    username: boraver
+    password: W@e3r4t5
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
   flyway:
     enabled: true
     baseline-on-migrate: true

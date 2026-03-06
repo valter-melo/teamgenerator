@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -16,9 +18,12 @@ import java.util.UUID;
 public class GameSession {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(nullable = false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
   private LocalDateTime startedAt;

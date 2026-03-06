@@ -1,6 +1,11 @@
 package com.boraver.teamgenerator.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -9,12 +14,18 @@ import java.util.UUID;
     name = "app_user",
     uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "email"})
 )
+@Getter
+@Setter
 public class AppUser {
 
-  @Id @GeneratedValue
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(name="tenant_id", nullable=false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
   @Column(nullable=false, length=120)
@@ -34,24 +45,4 @@ public class AppUser {
 
   @Column(name="created_at", nullable=false)
   private OffsetDateTime createdAt = OffsetDateTime.now();
-
-  public UUID getId() { return id; }
-
-  public UUID getTenantId() { return tenantId; }
-  public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }
-
-  public String getName() { return name; }
-  public void setName(String name) { this.name = name; }
-
-  public String getEmail() { return email; }
-  public void setEmail(String email) { this.email = email; }
-
-  public String getPasswordHash() { return passwordHash; }
-  public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
-
-  public String getRole() { return role; }
-  public void setRole(String role) { this.role = role; }
-
-  public boolean isActive() { return active; }
-  public void setActive(boolean active) { this.active = active; }
 }

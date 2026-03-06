@@ -1,22 +1,31 @@
 package com.boraver.teamgenerator.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name="player_skill_rating")
 public class PlayerSkillRating {
-  @Id @GeneratedValue
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(length = 36)
   private UUID id;
 
-  @Column(name="tenant_id", nullable=false)
+  @Column(name = "tenant_id", nullable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
   @Column(name="player_id", nullable=false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID playerId;
 
   @Column(name="skill_id", nullable=false)
+  @JdbcTypeCode(SqlTypes.CHAR)
   private UUID skillId;
 
   @Column(nullable=false)
