@@ -77,14 +77,15 @@ public class MatchResultService {
   }
 
   public List<TeamStats> getStatsFromActiveGameSession(UUID tenantId) {
-    List<Object[]> results = matchResultRepository.getTeamStatsFromActiveGameSession(tenantId);
+    List<Object[]> results = matchResultRepository.getTeamStatsFromActiveGameSession(tenantId.toString());
+
     return results.stream()
         .map(row -> new TeamStats(
-            convertSqlArrayToList(row[0]),
+            convertStringToUUIDList((String) row[0]),
             ((Number) row[1]).longValue(),
             ((Number) row[2]).longValue()
         ))
-        .toList();
+        .collect(Collectors.toList());
   }
 
   public List<MatchResultResponse> getHistory(UUID tenantId) {
@@ -92,6 +93,13 @@ public class MatchResultService {
         .stream()
         .map(this::mapToResponse)
         .toList();
+  }
+
+  private List<UUID> convertStringToUUIDList(String ids) {
+    if (ids == null || ids.isEmpty()) return Collections.emptyList();
+    return Arrays.stream(ids.split(","))
+        .map(UUID::fromString)
+        .collect(Collectors.toList());
   }
 
   private List<UUID> convertSqlArrayToList(Object arrayObj) {

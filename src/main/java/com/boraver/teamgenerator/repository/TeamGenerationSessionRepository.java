@@ -14,6 +14,8 @@ public interface TeamGenerationSessionRepository extends JpaRepository<TeamGener
   @Query("SELECT s FROM GameSession s WHERE s.tenantId = :tenantId AND s.active = true")
   Optional<GameSession> findActiveSessionByTenantId(@Param("tenantId") UUID tenantId);
 
+  Optional<TeamGenerationSession> findByGameSession(GameSession gameSession);
+
   @Query("SELECT s FROM TeamGenerationSession s WHERE s.gameSession.id = :gameSessionId")
   Optional<TeamGenerationSession> findByGameSessionId(@Param("gameSessionId") UUID gameSessionId);
 }

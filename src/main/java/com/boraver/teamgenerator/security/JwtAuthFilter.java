@@ -24,10 +24,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   }
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String uri = request.getRequestURI();
+
+    return "OPTIONS".equalsIgnoreCase(request.getMethod())
+            || uri.startsWith("/auth/")
+            || uri.startsWith("/v3/api-docs/")
+            || uri.startsWith("/swagger-ui/")
+            || "/swagger-ui.html".equals(uri)
+            || uri.matches("^/championships/[^/]+/stream$");
+  }
+
+  @Override
   protected void doFilterInternal(
-      HttpServletRequest request,
-      HttpServletResponse response,
-      FilterChain filterChain
+          HttpServletRequest request,
+          HttpServletResponse response,
+          FilterChain filterChain
   ) throws ServletException, IOException {
 
     String header = request.getHeader("Authorization");
@@ -51,9 +63,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
       Authentication auth = new UsernamePasswordAuthenticationToken(
-          userId, // 👈 PRINCIPAL É O UUID
-          null,
-          authorities
+              userId,
+              null,
+              authorities
       );
 
       SecurityContextHolder.getContext().setAuthentication(auth);

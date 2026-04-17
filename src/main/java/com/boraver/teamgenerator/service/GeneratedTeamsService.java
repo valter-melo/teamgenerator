@@ -1,5 +1,6 @@
 package com.boraver.teamgenerator.service;
 
+import com.boraver.teamgenerator.dto.teams.GeneratedTeamSessionSummary;
 import com.boraver.teamgenerator.dto.teams.SaveGeneratedTeamsRequest;
 import com.boraver.teamgenerator.entity.GeneratedTeams;
 import com.boraver.teamgenerator.repository.GeneratedTeamsRepository;
@@ -9,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -50,5 +53,12 @@ public class GeneratedTeamsService {
   @Transactional
   public void endDay(UUID tenantId) {
     repository.deactivatePreviousGenerations(tenantId);
+  }
+
+  public List<GeneratedTeamSessionSummary> listSessions(UUID tenantId) {
+    return repository.findTopByTenantIdAndActiveTrueOrderByCreatedAtDesc(tenantId)
+        .stream()
+        .map(gt -> new GeneratedTeamSessionSummary(gt.getId(), gt.getCreatedAt()))
+        .collect(Collectors.toList());
   }
 }

@@ -1,6 +1,7 @@
 package com.boraver.teamgenerator.controller;
 
 import com.boraver.teamgenerator.common.TenantContext;
+import com.boraver.teamgenerator.dto.teams.GeneratedTeamSessionSummary;
 import com.boraver.teamgenerator.dto.teams.SaveGeneratedTeamsRequest;
 import com.boraver.teamgenerator.service.GeneratedTeamsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -34,5 +36,11 @@ public class GeneratedTeamsController {
   public void endDay(Authentication auth) {
     UUID tenantId = UUID.fromString(TenantContext.getTenantId());
     service.endDay(tenantId);
+  }
+
+  @GetMapping("/sessions")
+  public List<GeneratedTeamSessionSummary> listSessions(Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    return service.listSessions(tenantId);
   }
 }

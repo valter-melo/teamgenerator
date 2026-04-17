@@ -17,7 +17,9 @@ import org.springframework.web.cors.CorsConfigurationSource;
 public class SecurityConfig {
 
   @Bean
-  public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+  public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+  }
 
   @Bean
   public JwtService jwtService(AppSecurityProps props) {
@@ -27,29 +29,38 @@ public class SecurityConfig {
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwtService) throws Exception {
     return http
-        .csrf(AbstractHttpConfigurer::disable)
-        .cors(Customizer.withDefaults())
-        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
-            .requestMatchers(
-                "/auth/**",
-                "/v3/api-docs/**",
-                "/swagger-ui/**",
-                "/swagger-ui.html"
-                ).permitAll()
-            .anyRequest().authenticated()
-        )
-        .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
-        .build();
+            .csrf(AbstractHttpConfigurer::disable)
+            .cors(Customizer.withDefaults())
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                    .requestMatchers(
+                            "/auth/**",
+                            "/v3/api-docs/**",
+                            "/swagger-ui/**",
+                            "/swagger-ui.html",
+                            "/championships/*/stream"
+                    ).permitAll()
+                    .anyRequest().authenticated()
+            )
+            .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+            .build();
   }
 
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     var config = new org.springframework.web.cors.CorsConfiguration();
-    config.setAllowedOriginPatterns(java.util.List.of("*"));
-    config.setAllowedMethods(java.util.List.of("GET","POST","PUT","DELETE", "PATCH", "OPTIONS"));
-    config.setAllowedHeaders(java.util.List.of("*"));
+    config.setAllowedOrigins(java.util.List.of(
+            "https://teamrandomizer-one.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000"
+    ));
+    config.setAllowedMethods(java.util.List.of(
+            "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
+    ));
+    config.setAllowedHeaders(java.util.List.of(
+            "Authorization", "Content-Type", "Accept", "Origin"
+    ));
     config.setAllowCredentials(true);
 
     var source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();

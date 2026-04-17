@@ -1,11 +1,14 @@
 package com.boraver.teamgenerator.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.teams.*;
 import com.boraver.teamgenerator.entity.*;
 import com.boraver.teamgenerator.repository.*;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class TeamGenerationService {
 
   private final PlayerRepository playerRepository;
@@ -21,26 +25,10 @@ public class TeamGenerationService {
   private final TeamSessionRepository sessionRepository;
   private final GeneratedTeamRepository teamRepository;
   private final GeneratedTeamPlayerRepository teamPlayerRepository;
+  private final ChampionshipRepository championshipRepository;
+  private final ChampionshipService championshipService;
   private final ObjectMapper mapper;
   private final JdbcTemplate jdbcTemplate;
-
-  public TeamGenerationService(
-      PlayerRepository playerRepo,
-      RatingRepository ratingRepo,
-      TeamSessionRepository sessionRepo,
-      GeneratedTeamRepository teamRepo,
-      GeneratedTeamPlayerRepository teamPlayerRepo,
-      ObjectMapper mapper,
-      JdbcTemplate jdbcTemplate
-  ) {
-    this.playerRepository = playerRepo;
-    this.ratingRepository = ratingRepo;
-    this.sessionRepository = sessionRepo;
-    this.teamRepository = teamRepo;
-    this.teamPlayerRepository = teamPlayerRepo;
-    this.mapper = mapper;
-    this.jdbcTemplate = jdbcTemplate;
-  }
 
   private UUID tenantId() {
     return UUID.fromString(Objects.requireNonNull(TenantContext.getTenantId(), "tenant missing"));
@@ -268,6 +256,111 @@ public class TeamGenerationService {
     }
 
     return new SaveGeneratedResponse(session.getId(), teamDtos);
+  }
+
+  public List<GenerateTeamsResponse.Team> getTeamsBySession(UUID sessionId, UUID tenantId) {
+    TeamGenerationSession session = sessionRepository.findById(sessionId)
+        .orElseThrow(() -> new IllegalArgumentException("Sessão não encontrada"));
+    if (!session.getTenantId().equals(tenantId)) {
+      throw new SecurityException("Acesso negado");
+    }
+    List<GeneratedTeam> generatedTeams = teamRepository.findAllBySessionIdOrderByTeamIndexAsc(sessionId);
+    List<GenerateTeamsResponse.Team> result = new ArrayList<>();
+    for (GeneratedTeam gt : generatedTeams) {
+      List<GeneratedTeamPlayer> players = teamPlayerRepository.findByTeamId(gt.getId());
+      List<GenerateTeamsResponse.PlayerPick> playerPicks = players.stream()
+          .map(p -> {
+            Player player = playerRepository.findById(p.getPlayerId()).orElseThrow();
+            return new GenerateTeamsResponse.PlayerPick(
+                player.getId(),
+                player.getName(),
+                String.valueOf(player.getSex()),
+                p.getScoreAtGeneration().doubleValue()
+            );
+          })
+          .collect(Collectors.toList());
+      double sumScore = players.stream().mapToDouble(p -> p.getScoreAtGeneration().doubleValue()).sum();
+      result.add(new GenerateTeamsResponse.Team(gt.getTeamIndex(), sumScore, playerPicks));
+    }
+    return result;
+  }
+
+  @Transactional
+  public SaveManualTeamsResponse saveManualTeams(
+      UUID tenantId,
+      UUID userId,
+      SaveManualTeamsRequest request
+  ) throws JsonProcessingException {
+    List<UUID> allPlayerIds = request.teams().stream()
+        .flatMap(t -> t.playerIds().stream())
+        .collect(Collectors.toList());
+
+    List<Player> players = playerRepository.findAllByIdInAndTenantId(allPlayerIds, tenantId);
+    if (players.size() != allPlayerIds.size()) {
+      throw new IllegalArgumentException("Alguns jogadores não foram encontrados ou não pertencem ao tenant");
+    }
+
+    // 2. Criar a sessão de geração (TeamGenerationSession)
+    TeamGenerationSession session = new TeamGenerationSession();
+    session.setTenantId(tenantId);
+    session.setMode("MANUAL");
+    session.setCreatedBy(userId);
+    session.setTeamCount(request.teams().size());
+    session.setPlayersPerTeam(request.teams().get(0).playerIds().size());
+    session.setPlayersCount(allPlayerIds.size());
+
+    // Armazenar metadados da montagem (nome, grupos, etc.)
+    ObjectNode rules = mapper.createObjectNode();
+    rules.put("name", request.name());
+    rules.put("groupsCount", request.groupsCount());
+    ObjectNode groupsNode = mapper.createObjectNode();
+    for (SaveManualTeamsRequest.ManualTeamDTO team : request.teams()) {
+      groupsNode.put(String.valueOf(team.teamIndex()), team.groupId());
+    }
+    rules.set("teamGroups", groupsNode);
+    session.setRulesJson(mapper.writeValueAsString(rules));
+    session = sessionRepository.save(session);
+
+    // 3. Persistir os times e jogadores (GeneratedTeam, GeneratedTeamPlayer)
+    //    (código idêntico ao anterior, omitido para brevidade)
+    List<GeneratedTeam> generatedTeams = new ArrayList<>();
+    for (SaveManualTeamsRequest.ManualTeamDTO teamDto : request.teams()) {
+      GeneratedTeam gt = new GeneratedTeam();
+      gt.setSessionId(session.getId());
+      gt.setTeamIndex(teamDto.teamIndex());
+      gt.setName("Time " + teamDto.teamIndex());
+      gt = teamRepository.save(gt);
+      generatedTeams.add(gt);
+
+      for (UUID playerId : teamDto.playerIds()) {
+        Player player = players.stream().filter(p -> p.getId().equals(playerId)).findFirst().orElseThrow();
+        GeneratedTeamPlayer gtp = new GeneratedTeamPlayer();
+        gtp.setTeamId(gt.getId());
+        gtp.setPlayerId(player.getId());
+        gtp.setSexAtGeneration(String.valueOf(player.getSex()));
+        gtp.setScoreAtGeneration(BigDecimal.ZERO);
+        ObjectNode snapshot = mapper.createObjectNode();
+        snapshot.put("method", "manual");
+        gtp.setSnapshotJson(mapper.writeValueAsString(snapshot));
+        teamPlayerRepository.save(gtp);
+      }
+    }
+
+    // 4. Construir o mapa teamIndex -> groupId
+    Map<Integer, Integer> teamGroupMap = new HashMap<>();
+    for (SaveManualTeamsRequest.ManualTeamDTO team : request.teams()) {
+      teamGroupMap.put(team.teamIndex(), team.groupId());
+    }
+
+    // 5. Delegar a criação do campeonato para o ChampionshipService
+    Championship championship = championshipService.createChampionshipFromManual(
+        tenantId, request, session, generatedTeams, teamGroupMap
+    );
+
+    // 6. Retornar resposta
+    SaveManualTeamsResponse response = new SaveManualTeamsResponse(session.getId(), championship.getId());
+    return response;
+
   }
 
   private Map<UUID, Double> computeSkillAverages(

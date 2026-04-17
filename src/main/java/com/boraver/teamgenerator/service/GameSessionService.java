@@ -20,7 +20,8 @@ public class GameSessionService {
 
   @Transactional
   public GameSession startSession(UUID tenantId, UUID teamGenerationId) {
-    if (gameSessionRepository.findByTenantIdAndActiveTrue(tenantId).isPresent()) {
+    Optional<GameSession> existing = gameSessionRepository.findByTenantIdAndActiveTrue(tenantId);
+    if (existing.isPresent()) {
       throw new RuntimeException("Já existe uma sessão ativa para este tenant");
     }
 
@@ -29,12 +30,12 @@ public class GameSessionService {
 
     GameSession session = new GameSession();
     session.setTenantId(tenantId);
-    session.setStartedAt(LocalDateTime.now());
     session.setActive(true);
-    gameSessionRepository.save(session);
+    session.setStartedAt(LocalDateTime.now());
+    session = gameSessionRepository.save(session);
 
     teamGen.setGameSession(session);
-    teamGenerationSessionRepository.save(teamGen);
+    teamGenerationSessionRepository.save(teamGen); // <-- essencial
 
     return session;
   }

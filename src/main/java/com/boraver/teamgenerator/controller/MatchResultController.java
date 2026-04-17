@@ -29,7 +29,9 @@ public class MatchResultController {
       Authentication auth
   ) {
     UUID tenantId = UUID.fromString(TenantContext.getTenantId());
-    return matchResultService.saveResult(tenantId, request);
+    MatchResultResponse result = matchResultService.saveResult(tenantId, request);
+
+    return result;
   }
 
   @GetMapping
@@ -41,7 +43,9 @@ public class MatchResultController {
   @GetMapping("/stats")
   public List<TeamStats> getStats(Authentication auth) {
     UUID tenantId = UUID.fromString(TenantContext.getTenantId());
-    return matchResultService.getStatsFromActiveGameSession(tenantId);
+    List<TeamStats> list = matchResultService.getStatsFromActiveGameSession(tenantId);
+
+    return list;
   }
 
   @GetMapping("/stats/active")

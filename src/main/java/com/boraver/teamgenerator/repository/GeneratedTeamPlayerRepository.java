@@ -13,4 +13,6 @@ public interface GeneratedTeamPlayerRepository extends JpaRepository<GeneratedTe
     where gtp.teamId in :teamIds
   """)
   List<GeneratedTeamPlayer> findAllByTeamIds(@Param("teamIds") List<UUID> teamIds);
+
+  List<GeneratedTeamPlayer> findByTeamId(UUID teamId);
 }
