@@ -8,4 +8,5 @@ import java.util.*;
 public interface TeamSessionRepository extends JpaRepository<TeamGenerationSession, UUID> {
   List<TeamGenerationSession> findTop50ByTenantIdOrderByCreatedAtDesc(UUID tenantId);
   Optional<TeamGenerationSession> findByIdAndTenantId(UUID id, UUID tenantId);
+  Optional<TeamGenerationSession> findTopByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 }

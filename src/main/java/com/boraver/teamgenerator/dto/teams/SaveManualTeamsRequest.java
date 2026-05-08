@@ -2,6 +2,7 @@ package com.boraver.teamgenerator.dto.teams;
 
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record SaveManualTeamsRequest(
@@ -9,7 +10,8 @@ public record SaveManualTeamsRequest(
     int groupsCount,
     String matchesType,  // "SINGLE" ou "HOME_AND_AWAY"
     int qualifiedPerGroup,
-    @NotEmpty List<ManualTeamDTO> teams
+    @NotEmpty List<ManualTeamDTO> teams,
+    Map<Integer, String> teamNames
 ) {
   public record ManualTeamDTO(
       int teamIndex,

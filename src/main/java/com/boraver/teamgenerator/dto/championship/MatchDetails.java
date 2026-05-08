@@ -13,5 +13,7 @@ public record MatchDetails(
     boolean played,
     Integer winnerTeamIndex,
     UUID generationSessionId,
-    String stage
+    String stage,
+    String homeTeamName,
+    String awayTeamName
 ) {}

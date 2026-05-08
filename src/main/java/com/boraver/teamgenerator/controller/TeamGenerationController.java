@@ -65,4 +65,11 @@ public class TeamGenerationController {
     SaveManualTeamsResponse response = service.saveManualTeams(tenantId, userId, request);
     return ResponseEntity.ok(response);
   }
+
+  @GetMapping("/latest-session")
+  public ResponseEntity<GenerateTeamsResponse> getLatestSession(Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    GenerateTeamsResponse response = service.getLatestSession(tenantId);
+    return ResponseEntity.ok(response);
+  }
 }

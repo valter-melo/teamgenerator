@@ -2,151 +2,195 @@ package com.boraver.teamgenerator.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @Slf4j
 public class SseService {
 
-    private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private static final long SSE_TIMEOUT = 0L;
+    private static final long HEARTBEAT_INTERVAL_MS = 15000L;
+
+    /**
+     * championshipId -> clientId -> connection
+     */
+    private final Map<String, Map<String, ClientConnection>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(String championshipId) {
-        SseEmitter emitter = new SseEmitter(0L);
+        String clientId = UUID.randomUUID().toString();
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+
+        ClientConnection connection = new ClientConnection(clientId, championshipId, emitter);
 
         emitters
-                .computeIfAbsent(championshipId, key -> new CopyOnWriteArrayList<>())
-                .add(emitter);
+                .computeIfAbsent(championshipId, key -> new ConcurrentHashMap<>())
+                .put(clientId, connection);
 
-        log.info("Novo subscriber SSE para campeonato {} | total: {}",
+        log.info("Novo subscriber SSE | campeonato: {} | clientId: {} | total: {}",
                 championshipId,
+                clientId,
                 emitters.get(championshipId).size());
 
         emitter.onCompletion(() -> {
-            log.info("SSE completion: {}", championshipId);
-            removeEmitter(championshipId, emitter);
+            log.info("SSE completion | campeonato: {} | clientId: {}", championshipId, clientId);
+            removeConnection(championshipId, clientId);
         });
 
         emitter.onTimeout(() -> {
-            log.warn("SSE timeout: {}", championshipId);
-            removeEmitter(championshipId, emitter);
-            safeComplete(emitter);
+            log.warn("SSE timeout | campeonato: {} | clientId: {}", championshipId, clientId);
+            removeConnection(championshipId, clientId);
         });
 
         emitter.onError((ex) -> {
-            log.warn("SSE error: {} - {}", championshipId, ex.getMessage());
-            removeEmitter(championshipId, emitter);
-            safeComplete(emitter);
+            log.warn("SSE error | campeonato: {} | clientId: {} | erro: {}",
+                    championshipId,
+                    clientId,
+                    ex == null ? "desconhecido" : ex.getMessage());
+            removeConnection(championshipId, clientId);
         });
 
         try {
-            emitter.send(
+            sendInternal(connection,
                     SseEmitter.event()
                             .name("connected")
-                            .data("SSE conectado com sucesso")
-            );
-        } catch (IOException e) {
-            log.warn("Erro ao enviar evento inicial SSE para campeonato {}: {}", championshipId, e.getMessage());
-            removeEmitter(championshipId, emitter);
-            safeComplete(emitter);
+                            .id(clientId)
+                            .reconnectTime(3000)
+                            .data("SSE conectado com sucesso"));
+        } catch (Exception e) {
+            log.warn("Erro ao enviar evento inicial | campeonato: {} | clientId: {} | erro: {}",
+                    championshipId, clientId, e.getMessage());
+            removeConnection(championshipId, clientId);
         }
 
         return emitter;
     }
 
     public void sendMatchUpdate(String championshipId, Object data) {
-        List<SseEmitter> championshipEmitters = emitters.get(championshipId);
-
-        log.info("Enviando SSE para campeonato {} | emitters: {}",
-                championshipId,
-                championshipEmitters == null ? 0 : championshipEmitters.size());
-
-        if (championshipEmitters == null || championshipEmitters.isEmpty()) {
-            return;
-        }
-
-        List<SseEmitter> deadEmitters = new ArrayList<>();
-
-        for (SseEmitter emitter : championshipEmitters) {
-            try {
-                emitter.send(
-                        SseEmitter.event()
-                                .name("matchUpdate")
-                                .data(data, MediaType.APPLICATION_JSON)
-                );
-            } catch (Exception e) {
-                log.warn("Erro ao enviar SSE para campeonato {}: {}", championshipId, e.getMessage());
-                deadEmitters.add(emitter);
-                safeComplete(emitter);
-            }
-        }
-
-        championshipEmitters.removeAll(deadEmitters);
-
-        if (championshipEmitters.isEmpty()) {
-            emitters.remove(championshipId);
-        }
+        sendEvent(championshipId, "matchUpdate", data);
     }
 
     public void sendEvent(String championshipId, String eventName, Object data) {
-        List<SseEmitter> championshipEmitters = emitters.get(championshipId);
+        Map<String, ClientConnection> connections = emitters.get(championshipId);
 
-        log.info("Enviando evento SSE [{}] para campeonato {} | emitters: {}",
+        log.info("Enviando SSE [{}] | campeonato: {} | conexões: {}",
                 eventName,
                 championshipId,
-                championshipEmitters == null ? 0 : championshipEmitters.size());
+                connections == null ? 0 : connections.size());
 
-        if (championshipEmitters == null || championshipEmitters.isEmpty()) {
+        if (connections == null || connections.isEmpty()) {
             return;
         }
 
-        List<SseEmitter> deadEmitters = new ArrayList<>();
+        for (Map.Entry<String, ClientConnection> entry : connections.entrySet()) {
+            String clientId = entry.getKey();
+            ClientConnection connection = entry.getValue();
 
-        for (SseEmitter emitter : championshipEmitters) {
+            if (!connection.active.get()) {
+                removeConnection(championshipId, clientId);
+                continue;
+            }
+
             try {
-                emitter.send(
+                sendInternal(connection,
                         SseEmitter.event()
                                 .name(eventName)
-                                .data(data, MediaType.APPLICATION_JSON)
-                );
+                                .data(data, MediaType.APPLICATION_JSON));
             } catch (Exception e) {
-                log.warn("Erro ao enviar evento SSE [{}] para campeonato {}: {}",
-                        eventName, championshipId, e.getMessage());
-                deadEmitters.add(emitter);
-                safeComplete(emitter);
+                log.warn("Erro ao enviar SSE [{}] | campeonato: {} | clientId: {} | erro: {}",
+                        eventName, championshipId, clientId, e.getMessage());
+
+                // 🔥 IMPORTANTE: NÃO chamar complete()
+                removeConnection(championshipId, clientId);
             }
         }
+    }
 
-        championshipEmitters.removeAll(deadEmitters);
+    /**
+     * Heartbeat para manter conexão viva e detectar disconnect
+     */
+    @Scheduled(fixedDelay = HEARTBEAT_INTERVAL_MS)
+    public void heartbeat() {
+        for (Map.Entry<String, Map<String, ClientConnection>> championshipEntry : emitters.entrySet()) {
+            String championshipId = championshipEntry.getKey();
+            Map<String, ClientConnection> connections = championshipEntry.getValue();
 
-        if (championshipEmitters.isEmpty()) {
+            for (Map.Entry<String, ClientConnection> clientEntry : connections.entrySet()) {
+                String clientId = clientEntry.getKey();
+                ClientConnection connection = clientEntry.getValue();
+
+                if (!connection.active.get()) {
+                    removeConnection(championshipId, clientId);
+                    continue;
+                }
+
+                try {
+                    sendInternal(connection, SseEmitter.event().comment("heartbeat"));
+                } catch (Exception e) {
+                    log.warn("Heartbeat falhou | campeonato: {} | clientId: {} | erro: {}",
+                            championshipId, clientId, e.getMessage());
+
+                    // 🔥 IMPORTANTE: só remover, não completar
+                    removeConnection(championshipId, clientId);
+                }
+            }
+        }
+    }
+
+    private void sendInternal(ClientConnection connection, SseEmitter.SseEventBuilder event) throws IOException {
+        if (!connection.active.get()) {
+            throw new IOException("Emitter inativo");
+        }
+
+        connection.sendLock.lock();
+        try {
+            if (!connection.active.get()) {
+                throw new IOException("Emitter inativo");
+            }
+
+            connection.emitter.send(event);
+        } finally {
+            connection.sendLock.unlock();
+        }
+    }
+
+    private void removeConnection(String championshipId, String clientId) {
+        Map<String, ClientConnection> connections = emitters.get(championshipId);
+
+        if (connections == null) {
+            return;
+        }
+
+        ClientConnection connection = connections.remove(clientId);
+
+        if (connection != null) {
+            connection.active.set(false);
+        }
+
+        if (connections.isEmpty()) {
             emitters.remove(championshipId);
         }
     }
 
-    private void removeEmitter(String championshipId, SseEmitter emitter) {
-        List<SseEmitter> championshipEmitters = emitters.get(championshipId);
+    private static class ClientConnection {
+        private final String clientId;
+        private final String championshipId;
+        private final SseEmitter emitter;
+        private final AtomicBoolean active = new AtomicBoolean(true);
+        private final ReentrantLock sendLock = new ReentrantLock();
 
-        if (championshipEmitters != null) {
-            championshipEmitters.remove(emitter);
-
-            if (championshipEmitters.isEmpty()) {
-                emitters.remove(championshipId);
-            }
-        }
-    }
-
-    private void safeComplete(SseEmitter emitter) {
-        try {
-            emitter.complete();
-        } catch (Exception ignored) {
+        private ClientConnection(String clientId, String championshipId, SseEmitter emitter) {
+            this.clientId = clientId;
+            this.championshipId = championshipId;
+            this.emitter = emitter;
         }
     }
 }

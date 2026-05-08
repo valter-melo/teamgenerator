@@ -354,13 +354,43 @@ public class TeamGenerationService {
 
     // 5. Delegar a criação do campeonato para o ChampionshipService
     Championship championship = championshipService.createChampionshipFromManual(
-        tenantId, request, session, generatedTeams, teamGroupMap
+        tenantId, request, session, generatedTeams, teamGroupMap, request.teamNames()
     );
 
     // 6. Retornar resposta
     SaveManualTeamsResponse response = new SaveManualTeamsResponse(session.getId(), championship.getId());
     return response;
 
+  }
+
+  public GenerateTeamsResponse getLatestSession(UUID tenantId) {
+    TeamGenerationSession latest = sessionRepository
+            .findTopByTenantIdOrderByCreatedAtDesc(tenantId)
+            .orElseThrow(() -> new IllegalArgumentException("Nenhuma sessão de geração encontrada"));
+
+    return getTeamsBySessionInternal(latest);
+  }
+
+  private GenerateTeamsResponse getTeamsBySessionInternal(TeamGenerationSession session) {
+    List<GeneratedTeam> generatedTeams = teamRepository.findAllBySessionIdOrderByTeamIndexAsc(session.getId());
+    List<GenerateTeamsResponse.Team> teams = new ArrayList<>();
+    for (GeneratedTeam gt : generatedTeams) {
+      List<GeneratedTeamPlayer> players = teamPlayerRepository.findByTeamId(gt.getId());
+      List<GenerateTeamsResponse.PlayerPick> picks = players.stream()
+              .map(p -> {
+                Player player = playerRepository.findById(p.getPlayerId()).orElseThrow();
+                return new GenerateTeamsResponse.PlayerPick(
+                        player.getId(),
+                        player.getName(),
+                        String.valueOf(player.getSex()),
+                        p.getScoreAtGeneration().doubleValue()
+                );
+              })
+              .collect(Collectors.toList());
+      double sum = players.stream().mapToDouble(p -> p.getScoreAtGeneration().doubleValue()).sum();
+      teams.add(new GenerateTeamsResponse.Team(gt.getTeamIndex(), sum, picks));
+    }
+    return new GenerateTeamsResponse(session.getId(), teams);
   }
 
   private Map<UUID, Double> computeSkillAverages(
@@ -388,30 +418,56 @@ public class TeamGenerationService {
   }
 
   private TeamBucket chooseTeam(
-      List<TeamBucket> teams,
-      ScoredPlayer sp,
-      int playersPerTeam,
-      boolean sexBalanceEnabled,
-      int maxMaleDiff
+          List<TeamBucket> teams,
+          ScoredPlayer sp,
+          int playersPerTeam,
+          boolean sexBalanceEnabled,
+          int maxMaleDiff
   ) {
+    // Times que ainda não estão lotados
     List<TeamBucket> candidates = teams.stream()
-        .filter(t -> t.players.size() < playersPerTeam)
-        .sorted(Comparator.comparingDouble(t -> t.sum))
-        .toList();
+            .filter(t -> t.players.size() < playersPerTeam)
+            .collect(Collectors.toList());
 
-    if (!sexBalanceEnabled) return candidates.get(0);
-
-    int minM = teams.stream().mapToInt(t -> t.males).min().orElse(0);
-    int maxM = teams.stream().mapToInt(t -> t.males).max().orElse(0);
-
-    for (TeamBucket t : candidates) {
-      int projectedMale = t.males + (sp.player.getSex() == 'M' ? 1 : 0);
-      int projectedMin = Math.min(minM, projectedMale);
-      int projectedMax = Math.max(maxM, projectedMale);
-
-      if (projectedMax - projectedMin <= maxMaleDiff) return t;
+    if (candidates.isEmpty()) {
+      throw new IllegalStateException("Nenhum time disponível para alocar jogador");
     }
-    return candidates.get(0);
+
+    // Se balanceamento de sexo estiver ativo, filtra para manter a restrição
+    if (sexBalanceEnabled) {
+      int currentMinM = teams.stream().mapToInt(t -> t.males).min().orElse(0);
+      int currentMaxM = teams.stream().mapToInt(t -> t.males).max().orElse(0);
+
+      List<TeamBucket> sexBalanced = new ArrayList<>();
+      for (TeamBucket t : candidates) {
+        int projectedMale = t.males + (sp.player.getSex() == 'M' ? 1 : 0);
+        int projectedMin = Math.min(currentMinM, projectedMale);
+        int projectedMax = Math.max(currentMaxM, projectedMale);
+        if (projectedMax - projectedMin <= maxMaleDiff) {
+          sexBalanced.add(t);
+        }
+      }
+      // Se houver pelo menos um time que atende, usa esses; caso contrário, mantém todos (fallback)
+      if (!sexBalanced.isEmpty()) {
+        candidates = sexBalanced;
+      }
+    }
+
+    // Ordena os candidatos pela soma atual
+    candidates.sort(Comparator.comparingDouble(t -> t.sum));
+    double minSum = candidates.get(0).sum;
+
+    // Define uma margem de 5% (ajustável)
+    double threshold = minSum * 1.05;
+
+    // Seleciona os times cuja soma esteja até a margem
+    List<TeamBucket> bestCandidates = candidates.stream()
+            .filter(t -> t.sum <= threshold)
+            .collect(Collectors.toList());
+
+    // Escolhe aleatoriamente entre os melhores
+    int randomIndex = new Random().nextInt(bestCandidates.size());
+    return bestCandidates.get(randomIndex);
   }
 
   private static class ScoredPlayer {

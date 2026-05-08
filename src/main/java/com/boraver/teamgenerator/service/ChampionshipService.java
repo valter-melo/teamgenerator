@@ -86,21 +86,24 @@ public class ChampionshipService {
     championship.setStatus("CREATED");
     championship.setMatchesType(request.matchesType());
 
+    Map<Integer, String> teamNames = request.teamNames();
+
     switch (request.format()) {
       case "GROUPS":
         if (hasPredefinedGroups) {
           championship.setGroupsCount(predefinedGroupsCount);
-          createGroupsFromPredefined(championship, generatedTeams, teamGroupMap, predefinedGroupsCount, request.qualifiedPerGroup());
+          createGroupsFromPredefined(championship, generatedTeams, teamGroupMap,
+                  predefinedGroupsCount, request.qualifiedPerGroup(), teamNames);
         } else {
           championship.setGroupsCount(request.groupsCount());
-          createGroupsFormat(championship, request, generatedTeams);
+          createGroupsFormat(championship, request, generatedTeams, teamNames);
         }
         break;
       case "KNOCKOUT":
-        createKnockoutFormat(championship, generatedTeams);
+        createKnockoutFormat(championship, generatedTeams, teamNames);
         break;
       case "LEAGUE":
-        createLeagueFormat(championship, generatedTeams);
+        createLeagueFormat(championship, generatedTeams, teamNames);
         break;
       default:
         throw new IllegalArgumentException("Formato inválido: " + request.format());
@@ -115,7 +118,8 @@ public class ChampionshipService {
   public Championship createChampionshipFromManual(UUID tenantId, SaveManualTeamsRequest request,
                                                    TeamGenerationSession session,
                                                    List<GeneratedTeam> generatedTeams,
-                                                   Map<Integer, Integer> teamGroupMap) {
+                                                   Map<Integer, Integer> teamGroupMap,
+                                                   Map<Integer, String> teamNames) {
     Championship championship = new Championship();
     championship.setTenantId(tenantId);
     championship.setName(request.name());
@@ -128,14 +132,16 @@ public class ChampionshipService {
     championship.setTeamCount(generatedTeams.size());
     championship = championshipRepository.save(championship);
 
-    createGroupsFromPredefined(championship, generatedTeams, teamGroupMap, request.groupsCount(), request.qualifiedPerGroup());
+    createGroupsFromPredefined(championship, generatedTeams, teamGroupMap,
+            request.groupsCount(), request.qualifiedPerGroup(), teamNames);
     return championship;
   }
 
   // ========================= GRUPOS (PRÉ-DEFINIDOS E AUTOMÁTICO) =========================
 
   private void createGroupsFromPredefined(Championship championship, List<GeneratedTeam> generatedTeams,
-                                          Map<Integer, Integer> teamGroupMap, int groupsCount, int qualifiedPerGroup) {
+                                          Map<Integer, Integer> teamGroupMap, int groupsCount,
+                                          int qualifiedPerGroup, Map<Integer, String> teamNames) {
     Map<Integer, List<GeneratedTeam>> groups = new HashMap<>();
     for (GeneratedTeam team : generatedTeams) {
       int groupId = teamGroupMap.getOrDefault(team.getTeamIndex(), 1);
@@ -163,6 +169,10 @@ public class ChampionshipService {
         } else {
           ct.setInitialScore(BigDecimal.ZERO);
         }
+        String teamName = (teamNames != null && teamNames.containsKey(gt.getTeamIndex()))
+                ? teamNames.get(gt.getTeamIndex())
+                : "Time " + gt.getTeamIndex();
+        ct.setName(teamName);
         championshipTeamRepository.save(ct);
       }
 
@@ -200,7 +210,8 @@ public class ChampionshipService {
     championship.setQualifiedPerGroup(qualifiedPerGroup);
   }
 
-  private void createGroupsFormat(Championship championship, CreateChampionshipRequest request, List<GeneratedTeam> generatedTeams) {
+  private void createGroupsFormat(Championship championship, CreateChampionshipRequest request,
+                                  List<GeneratedTeam> generatedTeams, Map<Integer, String> teamNames) {
     int teamCount = generatedTeams.size();
     int groupsCount = request.groupsCount();
     if (teamCount < groupsCount) {
@@ -257,6 +268,10 @@ public class ChampionshipService {
         } else {
           ct.setInitialScore(BigDecimal.ZERO);
         }
+        String teamName = (teamNames != null && teamNames.containsKey(gt.getTeamIndex()))
+                ? teamNames.get(gt.getTeamIndex())
+                : "Time " + gt.getTeamIndex();
+        ct.setName(teamName);
         championshipTeamRepository.save(ct);
       }
 
@@ -295,7 +310,8 @@ public class ChampionshipService {
     championshipRepository.save(championship);
   }
 
-  private void createKnockoutFormat(Championship championship, List<GeneratedTeam> generatedTeams) {
+  private void createKnockoutFormat(Championship championship, List<GeneratedTeam> generatedTeams,
+                                    Map<Integer, String> teamNames) {
     int teamCount = generatedTeams.size();
     if (teamCount % 4 != 0) {
       throw new IllegalArgumentException("Número de times (" + teamCount + ") deve ser múltiplo de 4 para eliminatórias");
@@ -318,7 +334,8 @@ public class ChampionshipService {
     }
   }
 
-  private void createLeagueFormat(Championship championship, List<GeneratedTeam> generatedTeams) {
+  private void createLeagueFormat(Championship championship, List<GeneratedTeam> generatedTeams,
+                                  Map<Integer, String> teamNames) {
     int teamCount = generatedTeams.size();
     boolean homeAndAway = true;
     int round = 1;
@@ -433,7 +450,6 @@ public class ChampionshipService {
       if (request.winnerTeamIndex() == null) {
         throw new IllegalArgumentException("Para WO, é necessário informar o time vencedor.");
       }
-      // Pontos do placar da partida (ex.: 10, 12) – NÃO afeta a classificação
       int pointsForWinner = request.woWinnerPoints() != null ? request.woWinnerPoints() : 10;
 
       if (request.winnerTeamIndex().equals(match.getHomeTeamIndex())) {
@@ -791,7 +807,6 @@ public class ChampionshipService {
     homeStanding.setPlayed(homeStanding.getPlayed() + 1);
     awayStanding.setPlayed(awayStanding.getPlayed() + 1);
 
-    // Gols: em WO, o placar é registrado com os pontos do set (ex.: 10x0) e isso afeta as estatísticas
     homeStanding.setGoalsFor(homeStanding.getGoalsFor() + match.getHomeScore());
     homeStanding.setGoalsAgainst(homeStanding.getGoalsAgainst() + match.getAwayScore());
     awayStanding.setGoalsFor(awayStanding.getGoalsFor() + match.getAwayScore());
@@ -801,20 +816,16 @@ public class ChampionshipService {
     int awayPoints = 0;
 
     if (isWalkover) {
-      // WO: vencedor ganha 3 pontos na classificação, perdedor 0
       if (match.getWinnerTeamIndex().equals(match.getHomeTeamIndex())) {
         homePoints = 3;
-        awayPoints = 0;
         homeStanding.setWins(homeStanding.getWins() + 1);
         awayStanding.setLosses(awayStanding.getLosses() + 1);
       } else {
-        homePoints = 0;
         awayPoints = 3;
         homeStanding.setLosses(homeStanding.getLosses() + 1);
         awayStanding.setWins(awayStanding.getWins() + 1);
       }
     } else {
-      // Jogo normal: vitória = 3, derrota = 1, empate = 1
       if (match.getHomeScore() > match.getAwayScore()) {
         homePoints = 3;
         awayPoints = 1;
@@ -874,6 +885,13 @@ public class ChampionshipService {
             .filter(m -> !"GROUP".equals(m.getStage()))
             .collect(Collectors.toList());
 
+    // Mapa de nomes dos times
+    Map<Integer, String> nameMap = teams.stream()
+            .collect(Collectors.toMap(
+                    ChampionshipTeam::getTeamIndex,
+                    ct -> ct.getName() != null ? ct.getName() : "Time " + ct.getTeamIndex(),
+                    (a, b) -> a));
+
     Map<Integer, List<StandingEntry>> standingsByGroup = new HashMap<>();
     Map<Integer, List<ChampionshipTeam>> teamsByGroup = teams.stream()
             .filter(ct -> ct.getGroupIndex() != null)
@@ -891,18 +909,19 @@ public class ChampionshipService {
               .map(ct -> {
                 ChampionshipStandings standing = standingsMap.get(ct.getTeamIndex());
                 if (standing != null) {
-                  return mapToStandingEntry(standing);
+                  return toStandingEntry(standing, nameMap);
                 } else {
                   return new StandingEntry(
                           ct.getTeamIndex(),
                           groupIdx,
-                          0, 0, 0, 0, 0, 0, 0, 0);
+                          0, 0, 0, 0, 0, 0, 0, 0,
+                          nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex()));
                 }
               })
               .sorted(Comparator
                       .comparingInt(StandingEntry::points).reversed()
-                      .thenComparingInt(StandingEntry::goalsDifference).reversed()
-                      .thenComparingInt(StandingEntry::goalsFor).reversed()
+                      .thenComparing(Comparator.comparingInt(StandingEntry::goalsDifference).reversed())
+                      .thenComparing(Comparator.comparingInt(StandingEntry::goalsFor).reversed())
                       .thenComparingInt(StandingEntry::teamIndex))
               .collect(Collectors.toList());
       standingsByGroup.put(groupIdx, groupEntries);
@@ -911,10 +930,10 @@ public class ChampionshipService {
     Map<Integer, List<MatchDetails>> matchesByGroup = groupMatches.stream()
             .filter(m -> m.getGroupIndex() != null)
             .collect(Collectors.groupingBy(ChampionshipMatch::getGroupIndex,
-                    Collectors.mapping(m -> mapToMatchDetails(m, generationSessionId), Collectors.toList())));
+                    Collectors.mapping(m -> mapToMatchDetails(m, generationSessionId, nameMap), Collectors.toList())));
 
     List<MatchDetails> knockoutMatchDetails = knockoutMatches.stream()
-            .map(m -> mapToMatchDetails(m, generationSessionId))
+            .map(m -> mapToMatchDetails(m, generationSessionId, nameMap))
             .collect(Collectors.toList());
 
     return new ChampionshipDetails(
@@ -927,6 +946,14 @@ public class ChampionshipService {
   }
 
   public List<StandingEntry> getGroupStandings(UUID championshipId, int groupIndex) {
+    Map<Integer, String> nameMap = championshipTeamRepository
+            .findByChampionshipId(championshipId)
+            .stream()
+            .collect(Collectors.toMap(
+                    ChampionshipTeam::getTeamIndex,
+                    ct -> ct.getName() != null ? ct.getName() : "Time " + ct.getTeamIndex(),
+                    (a, b) -> a));
+
     List<ChampionshipStandings> standings = standingsRepository
             .findByChampionshipIdOrderByGroupIndexAscPointsDescGoalsDifferenceDescGoalsForAsc(championshipId)
             .stream()
@@ -934,28 +961,37 @@ public class ChampionshipService {
             .collect(Collectors.toList());
 
     if (standings.isEmpty()) {
-      List<ChampionshipTeam> teams = championshipTeamRepository.findByChampionshipId(championshipId)
+      return championshipTeamRepository.findByChampionshipId(championshipId)
               .stream()
               .filter(ct -> ct.getGroupIndex() != null && ct.getGroupIndex() == groupIndex)
               .sorted(Comparator.comparingInt(ChampionshipTeam::getTeamIndex))
-              .collect(Collectors.toList());
-
-      return teams.stream()
               .map(ct -> new StandingEntry(
                       ct.getTeamIndex(),
                       ct.getGroupIndex(),
-                      0, 0, 0, 0, 0, 0, 0, 0))
+                      0, 0, 0, 0, 0, 0, 0, 0,
+                      nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex())))
               .collect(Collectors.toList());
     }
 
     standings.sort(Comparator
             .comparingInt(ChampionshipStandings::getPoints).reversed()
-            .thenComparingInt(ChampionshipStandings::getGoalsDifference).reversed()
-            .thenComparingInt(ChampionshipStandings::getGoalsFor).reversed()
+            .thenComparing(Comparator.comparingInt(ChampionshipStandings::getGoalsDifference).reversed())
+            .thenComparing(Comparator.comparingInt(ChampionshipStandings::getGoalsFor).reversed())
             .thenComparingInt(ChampionshipStandings::getTeamIndex));
 
     return standings.stream()
-            .map(this::mapToStandingEntry)
+            .map(s -> new StandingEntry(
+                    s.getTeamIndex(),
+                    s.getGroupIndex(),
+                    s.getPoints(),
+                    s.getPlayed(),
+                    s.getWins(),
+                    s.getDraws(),
+                    s.getLosses(),
+                    s.getGoalsFor(),
+                    s.getGoalsAgainst(),
+                    s.getGoalsDifference(),
+                    nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex())))
             .collect(Collectors.toList());
   }
 
@@ -963,8 +999,9 @@ public class ChampionshipService {
     Championship championship = championshipRepository.findById(championshipId)
             .orElseThrow(() -> new IllegalArgumentException("Campeonato não encontrado"));
     UUID generationSessionId = championship.getGenerationSession().getId();
+    Map<Integer, String> nameMap = buildTeamNameMap(championshipId);
     return championshipMatchRepository.findByChampionshipIdAndGroupIndexOrderByRoundAsc(championshipId, groupIndex).stream()
-            .map(m -> mapToMatchDetails(m, generationSessionId))
+            .map(m -> mapToMatchDetails(m, generationSessionId, nameMap))
             .collect(Collectors.toList());
   }
 
@@ -972,8 +1009,9 @@ public class ChampionshipService {
     Championship championship = championshipRepository.findById(championshipId)
             .orElseThrow(() -> new IllegalArgumentException("Campeonato não encontrado"));
     UUID generationSessionId = championship.getGenerationSession().getId();
+    Map<Integer, String> nameMap = buildTeamNameMap(championshipId);
     return championshipMatchRepository.findByChampionshipIdOrderByRoundAsc(championshipId).stream()
-            .map(m -> mapToMatchDetails(m, generationSessionId))
+            .map(m -> mapToMatchDetails(m, generationSessionId, nameMap))
             .collect(Collectors.toList());
   }
 
@@ -996,9 +1034,8 @@ public class ChampionshipService {
     Championship championship = championshipRepository.findById(championshipId)
             .orElseThrow(() -> new IllegalArgumentException("Campeonato não encontrado"));
     UUID generationSessionId = championship.getGenerationSession().getId();
-    return new MatchDetails(match.getId(), match.getGroupIndex(), match.getRound(),
-            match.getHomeTeamIndex(), match.getAwayTeamIndex(), match.getHomeScore(), match.getAwayScore(),
-            match.isPlayed(), match.getWinnerTeamIndex(), generationSessionId, match.getStage());
+    Map<Integer, String> nameMap = buildTeamNameMap(championshipId);
+    return mapToMatchDetails(match, generationSessionId, nameMap);
   }
 
   // ========================= MAPEAMENTOS DTO =========================
@@ -1020,14 +1057,40 @@ public class ChampionshipService {
     return new TeamInfo(ct.getTeamIndex(), ct.getGroupIndex(), ct.getSeed(), ct.getInitialScore());
   }
 
-  private StandingEntry mapToStandingEntry(ChampionshipStandings s) {
-    return new StandingEntry(s.getTeamIndex(), s.getGroupIndex(), s.getPoints(), s.getPlayed(),
-            s.getWins(), s.getDraws(), s.getLosses(), s.getGoalsFor(), s.getGoalsAgainst(), s.getGoalsDifference());
+  private StandingEntry toStandingEntry(ChampionshipStandings s, Map<Integer, String> nameMap) {
+    return new StandingEntry(
+            s.getTeamIndex(),
+            s.getGroupIndex(),
+            s.getPoints(),
+            s.getPlayed(),
+            s.getWins(),
+            s.getDraws(),
+            s.getLosses(),
+            s.getGoalsFor(),
+            s.getGoalsAgainst(),
+            s.getGoalsDifference(),
+            nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex())
+    );
   }
 
-  private MatchDetails mapToMatchDetails(ChampionshipMatch m, UUID generationSessionId) {
-    return new MatchDetails(m.getId(), m.getGroupIndex(), m.getRound(), m.getHomeTeamIndex(),
-            m.getAwayTeamIndex(), m.getHomeScore(), m.getAwayScore(), m.isPlayed(),
-            m.getWinnerTeamIndex(), generationSessionId, m.getStage());
+  private MatchDetails mapToMatchDetails(ChampionshipMatch m, UUID generationSessionId, Map<Integer, String> teamNameMap) {
+    return new MatchDetails(
+            m.getId(), m.getGroupIndex(), m.getRound(),
+            m.getHomeTeamIndex(), m.getAwayTeamIndex(),
+            m.getHomeScore(), m.getAwayScore(),
+            m.isPlayed(), m.getWinnerTeamIndex(),
+            generationSessionId, m.getStage(),
+            teamNameMap.getOrDefault(m.getHomeTeamIndex(), "Time " + m.getHomeTeamIndex()),
+            teamNameMap.getOrDefault(m.getAwayTeamIndex(), "Time " + m.getAwayTeamIndex())
+    );
+  }
+
+  private Map<Integer, String> buildTeamNameMap(UUID championshipId) {
+    return championshipTeamRepository.findByChampionshipId(championshipId)
+            .stream()
+            .collect(Collectors.toMap(
+                    ChampionshipTeam::getTeamIndex,
+                    ct -> ct.getName() != null ? ct.getName() : "Time " + ct.getTeamIndex(),
+                    (a, b) -> a));
   }
 }

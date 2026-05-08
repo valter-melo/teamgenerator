@@ -1,26 +1,30 @@
 package com.boraver.teamgenerator.common;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 @RestControllerAdvice
+@Slf4j
 public class ApiExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public Object badRequest(
+    public ResponseEntity<?> badRequest(
             IllegalArgumentException ex,
-            HttpServletRequest request,
-            HttpServletResponse response
+            HttpServletRequest request
     ) {
         if (isSseRequest(request)) {
-            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            return null;
+            log.warn("Erro em requisição SSE: {}", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
 
         Map<String, Object> body = new HashMap<>();
@@ -30,14 +34,13 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(SecurityException.class)
-    public Object unauthorized(
+    public ResponseEntity<?> unauthorized(
             SecurityException ex,
-            HttpServletRequest request,
-            HttpServletResponse response
+            HttpServletRequest request
     ) {
         if (isSseRequest(request)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return null;
+            log.warn("Erro de segurança em requisição SSE: {}", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         Map<String, Object> body = new HashMap<>();
@@ -47,15 +50,16 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public Object generic(
+    public ResponseEntity<?> generic(
             Exception ex,
-            HttpServletRequest request,
-            HttpServletResponse response
+            HttpServletRequest request
     ) {
         if (isSseRequest(request)) {
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            return null;
+            log.warn("Erro genérico em requisição SSE: {}", ex.getMessage(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+
+        log.error("Erro interno na API", ex);
 
         Map<String, Object> body = new HashMap<>();
         body.put("error", Objects.toString(ex.getMessage(), "Erro interno do servidor"));
@@ -64,7 +68,7 @@ public class ApiExceptionHandler {
     }
 
     private boolean isSseRequest(HttpServletRequest request) {
-        String accept = request.getHeader("Accept");
+        String accept = request.getHeader(HttpHeaders.ACCEPT);
         String uri = request.getRequestURI();
 
         return (accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE))

@@ -22,6 +22,9 @@ public class ChampionshipTeam {
   @JdbcTypeCode(SqlTypes.CHAR)
   private UUID championshipId;
 
+  @Column(name = "name")
+  private String name; // Se null, o frontend exibirá "Time {teamIndex}"
+
   @Column(name = "team_index", nullable = false)
   private int teamIndex; // índice do time original (Time 1, Time 2, etc.)
 
