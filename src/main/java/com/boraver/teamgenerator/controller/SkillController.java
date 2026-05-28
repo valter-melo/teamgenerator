@@ -34,4 +34,9 @@ public class SkillController {
   public SkillResponse update(@PathVariable UUID id, @RequestBody UpdateSkillRequest req) {
     return service.update(id, req);
   }
+
+  @DeleteMapping("/{id}")
+  public void delete(@PathVariable UUID id) {
+    service.delete(id);
+  }
 }

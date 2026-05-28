@@ -3,14 +3,11 @@ package com.boraver.teamgenerator.controller;
 import com.boraver.teamgenerator.dto.championship.*;
 import com.boraver.teamgenerator.service.ChampionshipService;
 import com.boraver.teamgenerator.common.TenantContext;
-import com.boraver.teamgenerator.service.SseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,7 +18,6 @@ import java.util.UUID;
 public class ChampionshipController {
 
   private final ChampionshipService championshipService;
-  private final SseService sseService;
 
   @PostMapping
   public ResponseEntity<ChampionshipResponse> create(
@@ -115,10 +111,5 @@ public class ChampionshipController {
   public ResponseEntity<Void> generateThirdPlace(@PathVariable UUID championshipId) {
     championshipService.generateThirdPlaceMatch(championshipId);
     return ResponseEntity.ok().build();
-  }
-
-  @GetMapping(value = "/{championshipId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  public SseEmitter stream(@PathVariable UUID championshipId) {
-    return sseService.subscribe(championshipId.toString());
   }
 }

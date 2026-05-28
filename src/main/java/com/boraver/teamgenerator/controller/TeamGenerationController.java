@@ -1,6 +1,8 @@
 package com.boraver.teamgenerator.controller;
 
 import com.boraver.teamgenerator.common.TenantContext;
+import com.boraver.teamgenerator.dto.game.DistributionRequest;
+import com.boraver.teamgenerator.dto.game.DistributionSuggestion;
 import com.boraver.teamgenerator.dto.teams.*;
 import com.boraver.teamgenerator.service.GameSessionService;
 import com.boraver.teamgenerator.service.TeamGenerationService;
@@ -71,5 +73,25 @@ public class TeamGenerationController {
     UUID tenantId = UUID.fromString(TenantContext.getTenantId());
     GenerateTeamsResponse response = service.getLatestSession(tenantId);
     return ResponseEntity.ok(response);
+  }
+
+  @PostMapping("/suggest-distribution")
+  public ResponseEntity<DistributionSuggestion> suggestDistribution(
+          @RequestBody DistributionRequest request,
+          Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    DistributionSuggestion suggestion = service.suggestDistribution(
+            request.sessionId(), tenantId, request.courtCount(), request.courtNames());
+    return ResponseEntity.ok(suggestion);
+  }
+
+  @PutMapping("/session/{sessionId}/move-player")
+  public ResponseEntity<Void> movePlayer(
+          @PathVariable UUID sessionId,
+          @Valid @RequestBody MovePlayerRequest request,
+          Authentication auth) {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    service.movePlayer(sessionId, tenantId, request);
+    return ResponseEntity.ok().build();
   }
 }

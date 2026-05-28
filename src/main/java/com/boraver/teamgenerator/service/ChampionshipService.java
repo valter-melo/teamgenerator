@@ -31,7 +31,6 @@ public class ChampionshipService {
   private final PlayerRepository playerRepository;
   private final GameSessionRepository gameSessionRepository;
   private final ObjectMapper mapper;
-  private final SseService sseService;
 
   private static final List<String> KNOCKOUT_STAGE_ORDER = List.of("QUARTER", "SEMI", "FINAL");
 
@@ -234,15 +233,15 @@ public class ChampionshipService {
 
     List<GeneratedTeam> sortedTeams = generatedTeams.stream()
             .sorted(Comparator.comparingDouble(this::calculateTeamAverageScore).reversed())
-            .collect(Collectors.toList());
+            .toList();
 
     List<List<GeneratedTeam>> groups = new ArrayList<>();
     for (int i = 0; i < groupsCount; i++) groups.add(new ArrayList<>());
 
     int direction = 1;
     int currentGroup = 0;
-    for (int i = 0; i < sortedTeams.size(); i++) {
-      groups.get(currentGroup).add(sortedTeams.get(i));
+    for (GeneratedTeam sortedTeam : sortedTeams) {
+      groups.get(currentGroup).add(sortedTeam);
       currentGroup += direction;
       if (currentGroup == groupsCount) {
         currentGroup = groupsCount - 1;
@@ -318,7 +317,7 @@ public class ChampionshipService {
     }
     List<GeneratedTeam> sortedTeams = generatedTeams.stream()
             .sorted(Comparator.comparingDouble(this::calculateTeamAverageScore).reversed())
-            .collect(Collectors.toList());
+            .toList();
 
     int round = 1;
     for (int i = 0; i < sortedTeams.size() / 2; i++) {
@@ -480,26 +479,7 @@ public class ChampionshipService {
       updateStandings(championshipId, match, isWalkover, request.woWinnerPoints());
     }
 
-    Map<String, Object> update = buildSSEPayload(match, isWalkover);
-    sseService.sendMatchUpdate(championshipId.toString(), update);
-
     checkAndFinishChampionship(championshipId);
-  }
-
-  private Map<String, Object> buildSSEPayload(ChampionshipMatch match, boolean isWalkover) {
-    Map<String, Object> update = new HashMap<>();
-    update.put("type", "MATCH_RESULT_REGISTERED");
-    update.put("matchId", match.getId());
-    update.put("homeScore", match.getHomeScore());
-    update.put("awayScore", match.getAwayScore());
-    update.put("played", true);
-    update.put("winnerTeamIndex", match.getWinnerTeamIndex());
-    update.put("stage", match.getStage());
-    update.put("walkover", isWalkover);
-    if (match.getGroupIndex() != null) {
-      update.put("groupIndex", match.getGroupIndex());
-    }
-    return update;
   }
 
   // ========================= FASE ELIMINATÓRIA (MATA‑MATA) =========================
@@ -1092,5 +1072,16 @@ public class ChampionshipService {
                     ChampionshipTeam::getTeamIndex,
                     ct -> ct.getName() != null ? ct.getName() : "Time " + ct.getTeamIndex(),
                     (a, b) -> a));
+  }
+
+  public long countByTenant(UUID tenantId) {
+    return championshipRepository.countByTenantId(tenantId);
+  }
+  public long countByStatus(UUID tenantId, String status) {
+    return championshipRepository.countByTenantIdAndStatus(tenantId, status);
+  }
+
+  public long countMatches(UUID tenantId) {
+    return championshipMatchRepository.countByChampionshipTenantId(tenantId);
   }
 }

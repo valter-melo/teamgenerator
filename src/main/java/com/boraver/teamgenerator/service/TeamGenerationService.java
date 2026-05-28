@@ -1,18 +1,22 @@
 package com.boraver.teamgenerator.service;
 
+import com.boraver.teamgenerator.dto.match.ActiveSessionDTO;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.teams.*;
+import com.boraver.teamgenerator.dto.game.*;
 import com.boraver.teamgenerator.entity.*;
 import com.boraver.teamgenerator.repository.*;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,10 +29,8 @@ public class TeamGenerationService {
   private final TeamSessionRepository sessionRepository;
   private final GeneratedTeamRepository teamRepository;
   private final GeneratedTeamPlayerRepository teamPlayerRepository;
-  private final ChampionshipRepository championshipRepository;
   private final ChampionshipService championshipService;
   private final ObjectMapper mapper;
-  private final JdbcTemplate jdbcTemplate;
 
   private UUID tenantId() {
     return UUID.fromString(Objects.requireNonNull(TenantContext.getTenantId(), "tenant missing"));
@@ -184,7 +186,7 @@ public class TeamGenerationService {
     }
 
     int teamCount = request.teams().size();
-    int playersPerTeam = request.teams().get(0).players().size(); // assume que todos os times têm o mesmo número de jogadores
+    int playersPerTeam = request.teams().getFirst().players().size(); // assume que todos os times têm o mesmo número de jogadores
 
     // Coletar todos os IDs de jogadores
     List<UUID> allPlayerIds = request.teams().stream()
@@ -369,6 +371,175 @@ public class TeamGenerationService {
             .orElseThrow(() -> new IllegalArgumentException("Nenhuma sessão de geração encontrada"));
 
     return getTeamsBySessionInternal(latest);
+  }
+
+  public long countTeamsByTenant(UUID tenantId) {
+    return teamRepository.countByTenantId(tenantId);
+  }
+
+  public DistributionSuggestion suggestDistribution(UUID sessionId, UUID tenantId, int courtCount, List<String> courtNames) {
+    TeamGenerationSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+    if (!session.getTenantId().equals(tenantId)) {
+      throw new SecurityException("Access denied");
+    }
+
+    List<GeneratedTeam> teams = teamRepository.findAllBySessionIdOrderByTeamIndexAsc(sessionId);
+
+    // Record local para estatísticas dos times
+    record TeamStats(int teamIndex, String teamName, double avgRating, int womenCount) {}
+
+    List<TeamStats> stats = teams.stream().map(team -> {
+      List<GeneratedTeamPlayer> players = teamPlayerRepository.findByTeamId(team.getId());
+      double avgRating = players.stream()
+              .mapToDouble(p -> p.getScoreAtGeneration().doubleValue())
+              .average().orElse(0.0);
+      int womenCount = (int) players.stream()
+              .filter(p -> "F".equals(p.getSexAtGeneration()))
+              .count();
+      String teamName = team.getName() != null ? team.getName() : "Team " + team.getTeamIndex();
+      return new TeamStats(team.getTeamIndex(), teamName, avgRating, womenCount);
+    }).sorted(Comparator
+            .comparingDouble(TeamStats::avgRating).reversed()
+            .thenComparingInt(TeamStats::womenCount).reversed()).toList();
+
+    // Ordenação: maior rating primeiro, depois maior número de mulheres (snake draft)
+
+    // Inicializa as quadras
+    List<List<TeamStats>> courtBuckets = new ArrayList<>();
+    for (int i = 0; i < courtCount; i++) {
+      courtBuckets.add(new ArrayList<>());
+    }
+
+    // Distribuição em "serpente" (snake draft)
+    int direction = 1;
+    int currentCourt = 0;
+    for (TeamStats team : stats) {
+      courtBuckets.get(currentCourt).add(team);
+      currentCourt += direction;
+      if (currentCourt == courtCount || currentCourt == -1) {
+        direction *= -1;
+        currentCourt += direction;
+      }
+    }
+
+    // Monta resposta
+    List<DistributionSuggestion.CourtAllocation> courts = new ArrayList<>();
+    for (int i = 0; i < courtCount; i++) {
+      List<DistributionSuggestion.TeamInfo> teamInfos = courtBuckets.get(i).stream()
+              .map(ts -> new DistributionSuggestion.TeamInfo(
+                      ts.teamIndex(), ts.teamName(), ts.avgRating(), ts.womenCount()))
+              .collect(Collectors.toList());
+      courts.add(new DistributionSuggestion.CourtAllocation(
+              courtNames.get(i) != null ? courtNames.get(i) : "Court " + (i + 1),
+              teamInfos));
+    }
+
+    return new DistributionSuggestion(courts);
+  }
+
+  @Transactional
+  public TeamGenerationSession startSessionWithCourts(UUID tenantId, UUID sessionId,
+                                                      List<StartWithCourtsRequest.CourtAssignment> courts) {
+    TeamGenerationSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("Sessão não encontrada"));
+    if (!session.getTenantId().equals(tenantId)) {
+      throw new SecurityException("Acesso negado");
+    }
+
+    // Serializa as quadras no rulesJson (ou em um campo dedicado se existir)
+    ObjectNode rules = mapper.createObjectNode();
+    rules.put("mode", "avulso");
+    ArrayNode courtsArray = rules.putArray("courts");
+    for (var court : courts) {
+      ObjectNode courtNode = courtsArray.addObject();
+      courtNode.put("name", court.name());
+      ArrayNode teamsNode = courtNode.putArray("teamIndices");
+      court.teamIndices().forEach(teamsNode::add);
+    }
+    session.setRulesJson(rules.toString());
+
+    return sessionRepository.save(session);
+  }
+
+  public ActiveSessionDTO getActiveSessionDetails(UUID tenantId, UUID sessionId) {
+    TeamGenerationSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+    if (!session.getTenantId().equals(tenantId)) {
+      throw new SecurityException("Access denied");
+    }
+
+    JsonNode rules = parseRulesJson(session.getRulesJson());
+    List<ActiveSessionDTO.CourtDTO> courts = new ArrayList<>();
+    JsonNode courtsArray = rules.get("courts");
+    if (courtsArray != null) {
+      for (JsonNode courtNode : courtsArray) {
+        String courtName = courtNode.get("name").asText();
+        List<Integer> teamIndices = new ArrayList<>();
+        courtNode.get("teamIndices").forEach(t -> teamIndices.add(t.asInt()));
+
+        List<GeneratedTeam> teams = teamRepository.findAllBySessionIdAndTeamIndexIn(
+                session.getId(), teamIndices);
+        List<ActiveSessionDTO.TeamInfo> teamInfos = teams.stream().map(team -> {
+          List<GeneratedTeamPlayer> players = teamPlayerRepository.findByTeamId(team.getId());
+          double avg = players.stream()
+                  .mapToDouble(p -> p.getScoreAtGeneration().doubleValue())
+                  .average().orElse(0.0);
+          int women = (int) players.stream()
+                  .filter(p -> "F".equals(p.getSexAtGeneration())).count();
+          List<String> names = players.stream()
+                  .map(p -> playerRepository.findById(p.getPlayerId()).orElseThrow().getName())
+                  .collect(Collectors.toList());
+          String teamName = team.getName() != null ? team.getName() : "Team " + team.getTeamIndex();
+          return new ActiveSessionDTO.TeamInfo(team.getTeamIndex(), teamName, avg, women, names);
+        }).collect(Collectors.toList());
+
+        courts.add(new ActiveSessionDTO.CourtDTO(courtName, teamInfos));
+      }
+    }
+
+    String formattedDate = session.getCreatedAt()
+            .format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+    return new ActiveSessionDTO(session.getId(), formattedDate, courts);
+  }
+
+  @Transactional
+  public void movePlayer(UUID sessionId, UUID tenantId, MovePlayerRequest request) {
+    TeamGenerationSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("Sessão não encontrada"));
+    if (!session.getTenantId().equals(tenantId)) {
+      throw new SecurityException("Acesso negado");
+    }
+
+    // Busca os times envolvidos
+    GeneratedTeam fromTeam = teamRepository.findBySessionIdAndTeamIndex(sessionId, request.fromTeamIndex())
+            .orElseThrow(() -> new IllegalArgumentException("Time de origem não encontrado"));
+    GeneratedTeam toTeam = teamRepository.findBySessionIdAndTeamIndex(sessionId, request.toTeamIndex())
+            .orElseThrow(() -> new IllegalArgumentException("Time de destino não encontrado"));
+
+    // Encontra o registro do jogador no time de origem
+    GeneratedTeamPlayer playerToMove = teamPlayerRepository
+            .findByTeamIdAndPlayerId(fromTeam.getId(), request.playerId())
+            .orElseThrow(() -> new IllegalArgumentException("Jogador não está no time de origem"));
+
+    // Verifica se o time de destino já está cheio (limite opcional, aqui não travamos)
+    // Apenas move
+    playerToMove.setTeamId(toTeam.getId());
+    teamPlayerRepository.save(playerToMove);
+
+    // Opcional: recalc a soma dos scores (pode ser feito sob demanda)
+    // Se quiser manter o sumScore em GeneratedTeam, atualize aqui
+  }
+
+  private JsonNode parseRulesJson(String rulesJson) {
+    if (rulesJson == null || rulesJson.isBlank()) {
+      throw new IllegalStateException("Session rules not found");
+    }
+    try {
+      return mapper.readTree(rulesJson);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to parse session rules JSON", e);
+    }
   }
 
   private GenerateTeamsResponse getTeamsBySessionInternal(TeamGenerationSession session) {

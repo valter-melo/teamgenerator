@@ -3,6 +3,7 @@ package com.boraver.teamgenerator.service;
 import com.boraver.teamgenerator.dto.teams.GeneratedTeamSessionSummary;
 import com.boraver.teamgenerator.dto.teams.SaveGeneratedTeamsRequest;
 import com.boraver.teamgenerator.entity.GeneratedTeams;
+import com.boraver.teamgenerator.repository.ChampionshipRepository;
 import com.boraver.teamgenerator.repository.GeneratedTeamsRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 public class GeneratedTeamsService {
 
   private final GeneratedTeamsRepository repository;
+  private final ChampionshipRepository championshipRepository;
   private final ObjectMapper objectMapper;
 
   @Transactional
@@ -60,5 +62,13 @@ public class GeneratedTeamsService {
         .stream()
         .map(gt -> new GeneratedTeamSessionSummary(gt.getId(), gt.getCreatedAt()))
         .collect(Collectors.toList());
+  }
+
+  public long countByTenant(UUID tenantId) {
+    return championshipRepository.countByTenantId(tenantId);
+  }
+
+  public long countByStatus(UUID tenantId, String status) {
+    return championshipRepository.countByTenantIdAndStatus(tenantId, status);
   }
 }

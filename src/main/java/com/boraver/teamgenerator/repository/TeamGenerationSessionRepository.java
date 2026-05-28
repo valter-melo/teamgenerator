@@ -6,13 +6,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface TeamGenerationSessionRepository extends JpaRepository<TeamGenerationSession, UUID> {
 
-  @Query("SELECT s FROM GameSession s WHERE s.tenantId = :tenantId AND s.active = true")
-  Optional<GameSession> findActiveSessionByTenantId(@Param("tenantId") UUID tenantId);
+  List<TeamGenerationSession> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 
   Optional<TeamGenerationSession> findByGameSession(GameSession gameSession);
 

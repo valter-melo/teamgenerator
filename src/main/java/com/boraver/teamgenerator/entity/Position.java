@@ -5,16 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name="player")
+@Table(name = "position")
 @Getter
 @Setter
-public class Player {
+public class Position {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   @JdbcTypeCode(SqlTypes.CHAR)
@@ -25,24 +22,9 @@ public class Player {
   @JdbcTypeCode(SqlTypes.CHAR)
   private UUID tenantId;
 
-  @Column(nullable=false, length=120)
+  @Column(nullable = false, length = 120)
   private String name;
 
-  @Column(nullable=false, length=1)
-  private char sex; // M/F
-
-  @Column(length = 255)
-  private String email;
-
-  @Column(length = 20)
-  private String phone;
-
-  @Column(name = "birth_date")
-  private LocalDate birthDate;
-
-  @Column(nullable=false)
+  @Column(nullable = false)
   private boolean active = true;
-
-  @Column(name="created_at", nullable=false)
-  private OffsetDateTime createdAt = OffsetDateTime.now();
 }

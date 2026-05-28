@@ -37,6 +37,14 @@ public class PlayerSkillRating {
   @Column(name="valid_to")
   private OffsetDateTime validTo;
 
+  public OffsetDateTime getValidFrom() {
+    return validFrom;
+  }
+
+  public void setValidFrom(OffsetDateTime validFrom) {
+    this.validFrom = validFrom;
+  }
+
   public UUID getId() { return id; }
   public UUID getTenantId() { return tenantId; }
   public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }

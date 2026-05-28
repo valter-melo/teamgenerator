@@ -1,6 +1,10 @@
+server:
+  servlet:
+    context-path: /api
+
 spring:
   datasource:
-    url: jdbc:mysql://boraver.mysql.dbaas.com.br:3306/boraver?useSSL=true&requireSSL=true&serverTimezone=UTC&createDatabaseIfNotExist=true
+    url: jdbc:mysql://23.106.44.62:3306/boraver?useSSL=true&requireSSL=true&serverTimezone=UTC&createDatabaseIfNotExist=true
     username: boraver
     password: W@e3r4t5
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -9,9 +13,9 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
       validation-timeout: 5000
-      max-lifetime: 1800000      # 30 min
-      idle-timeout: 600000       # 10 min
-      keepalive-time: 300000     # 5 min
+      max-lifetime: 1800000
+      idle-timeout: 600000
+      keepalive-time: 300000
   jpa:
     hibernate:
       ddl-auto: validate
@@ -23,11 +27,13 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
     validate-on-migrate: true
+
 logging:
   level:
     com.zaxxer.hikari: ERROR
     org.flywaydb: INFO
     org.springframework.boot.autoconfigure.flyway: INFO
+
 app:
   security:
     jwt-secret: 8782028c-93e4-4664-97b1-c1a3c1780032

@@ -55,7 +55,12 @@ public class SecurityConfig {
     config.setAllowedOrigins(java.util.List.of(
             "https://teamrandomizer-one.vercel.app",
             "http://localhost:5173",
-            "http://localhost:3000"
+            "http://localhost:3000",
+            "http://23.106.44.62:3000",
+            "https://rando.esp.br",
+            "https://www.rando.esp.br",
+            "http://rando.esp.br",
+            "http://www.rando.esp.br"
     ));
     config.setAllowedMethods(java.util.List.of(
             "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"

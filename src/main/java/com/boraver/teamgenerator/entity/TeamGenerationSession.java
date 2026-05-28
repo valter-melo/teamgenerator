@@ -26,7 +26,7 @@ public class TeamGenerationSession {
   private UUID tenantId;
 
   @Column(nullable=false, length=10)
-  private String mode; // TXT / DB
+  private String mode;
 
   @Column(name="created_by")
   @JdbcTypeCode(SqlTypes.CHAR)

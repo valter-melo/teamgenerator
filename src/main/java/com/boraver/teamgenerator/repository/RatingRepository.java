@@ -4,6 +4,7 @@ import com.boraver.teamgenerator.entity.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 public interface RatingRepository extends JpaRepository<PlayerSkillRating, UUID> {
@@ -48,6 +49,20 @@ public interface RatingRepository extends JpaRepository<PlayerSkillRating, UUID>
     order by r.validFrom desc
   """)
   List<PlayerSkillRating> findAllByPlayer(UUID tenantId, UUID playerId);
+
+  @Query("SELECT MAX(r.validFrom) FROM PlayerSkillRating r WHERE r.playerId = :playerId AND r.validTo IS NULL")
+  LocalDateTime findLastRatingDateByPlayerId(@Param("playerId") UUID playerId);
+
+  @Query("""
+    select r from PlayerSkillRating r
+    where r.tenantId = :tenantId
+      and r.playerId = :playerId
+    order by r.validFrom asc
+  """)
+  List<PlayerSkillRating> findAllByPlayerOrderByValidFromAsc(
+          @Param("tenantId") UUID tenantId,
+          @Param("playerId") UUID playerId
+  );
 }
 
 

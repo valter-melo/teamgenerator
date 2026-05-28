@@ -7,4 +7,6 @@ import java.util.*;
 public interface SkillRepository extends JpaRepository<Skill, UUID> {
   List<Skill> findAllByTenantIdAndActiveTrue(UUID tenantId);
   Optional<Skill> findByIdAndTenantId(UUID id, UUID tenantId);
+  Optional<Skill> findByTenantIdAndNameIgnoreCase(UUID tenantId, String name);
+  long countByTenantIdAndActiveTrue(UUID tenantId);
 }

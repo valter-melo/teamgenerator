@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface ChampionshipRepository extends JpaRepository<Championship, UUID> {
   List<Championship> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
+  long countByTenantId(UUID tenantId);
+  long countByTenantIdAndStatus(UUID tenantId, String status);
 }
