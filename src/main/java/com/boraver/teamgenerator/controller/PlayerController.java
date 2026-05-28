@@ -61,4 +61,9 @@ public class PlayerController {
   public List<PlayerEvolutionDTO> getEvolution(@PathVariable UUID playerId) {
     return ratingService.getEvolution(playerId);
   }
+
+  @GetMapping("/with-ratings")
+  public List<PlayerResponse> listActiveWithRatings() {
+    return playerService.listActiveWithRatings();
+  }
 }

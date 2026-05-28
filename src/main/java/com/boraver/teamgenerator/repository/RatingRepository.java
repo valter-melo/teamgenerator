@@ -63,6 +63,17 @@ public interface RatingRepository extends JpaRepository<PlayerSkillRating, UUID>
           @Param("tenantId") UUID tenantId,
           @Param("playerId") UUID playerId
   );
+
+  @Query("""
+    SELECT psr FROM PlayerSkillRating psr
+    WHERE psr.tenantId = :tenantId
+      AND psr.playerId IN :playerIds
+      AND psr.validTo IS NULL
+  """)
+  List<PlayerSkillRating> findCurrentRatingsForPlayers(
+    @Param("tenantId") UUID tenantId,
+    @Param("playerIds") List<UUID> playerIds
+  );
 }
 
 

@@ -29,6 +29,7 @@ public class TeamGenerationService {
   private final TeamSessionRepository sessionRepository;
   private final GeneratedTeamRepository teamRepository;
   private final GeneratedTeamPlayerRepository teamPlayerRepository;
+  private final PlayerPositionRepository playerPositionRepository;
   private final ChampionshipService championshipService;
   private final ObjectMapper mapper;
 
@@ -53,9 +54,9 @@ public class TeamGenerationService {
     }
 
     List<Player> players = playerRepository.findAllByTenantIdAndIdIn(tenant, req.playerIds())
-        .stream()
-        .filter(Player::isActive)
-        .toList();
+      .stream()
+      .filter(Player::isActive)
+      .toList();
 
     if (players.size() < needed) {
       throw new IllegalArgumentException("Not enough ACTIVE players. Needed=" + needed + ", activeFound=" + players.size());
@@ -69,19 +70,19 @@ public class TeamGenerationService {
     Map<UUID, Map<UUID, Integer>> ratingMap = new HashMap<>();
     for (var r : ratings) {
       ratingMap
-          .computeIfAbsent(r.getPlayerId(), k -> new HashMap<>())
-          .put(r.getSkillId(), (int) r.getRating());
+        .computeIfAbsent(r.getPlayerId(), k -> new HashMap<>())
+        .put(r.getSkillId(), (int) r.getRating());
     }
 
     Map<UUID, Double> skillAvg = computeSkillAverages(playerIds, skillIds, ratingMap);
 
     double multM = (req.sexMultiplier() != null && req.sexMultiplier().get("M") != null)
-        ? req.sexMultiplier().get("M")
-        : 1.0;
+      ? req.sexMultiplier().get("M")
+      : 1.0;
 
     double multF = (req.sexMultiplier() != null && req.sexMultiplier().get("F") != null)
-        ? req.sexMultiplier().get("F")
-        : 0.92;
+      ? req.sexMultiplier().get("F")
+      : 0.92;
 
     List<ScoredPlayer> scored = new ArrayList<>();
     for (Player p : players) {
@@ -91,8 +92,8 @@ public class TeamGenerationService {
 
       for (GenerateTeamsRequest.SelectedSkill s : req.selectedSkills()) {
         int r = pr.getOrDefault(
-            s.skillId(),
-            (int) Math.round(skillAvg.getOrDefault(s.skillId(), 2.5))
+          s.skillId(),
+          (int) Math.round(skillAvg.getOrDefault(s.skillId(), 2.5))
         );
         base += r * s.weight();
       }
@@ -101,9 +102,10 @@ public class TeamGenerationService {
       scored.add(new ScoredPlayer(p, base, base * mult, pr));
     }
 
-    // ✅ CORREÇÃO PRINCIPAL: evita inferência errada (Object)
     scored.sort(Comparator.comparingDouble(ScoredPlayer::getFinalScore).reversed());
 
+    // --- INÍCIO DAS ALTERAÇÕES ---
+    // Cria os times vazios
     List<TeamBucket> teams = new ArrayList<>();
     for (int i = 0; i < req.teamCount(); i++) {
       teams.add(new TeamBucket(i + 1));
@@ -112,15 +114,65 @@ public class TeamGenerationService {
     boolean sexBal = req.sexBalance() != null && req.sexBalance().enabled();
     int maxMaleDiff = req.sexBalance() != null ? Math.max(0, req.sexBalance().maxMaleDiff()) : 1;
 
-    // Pega apenas os "needed" melhores
-    List<ScoredPlayer> selected = scored.subList(0, needed);
+    // Pega apenas os "needed" melhores (agora mutável)
+    List<ScoredPlayer> selected = new ArrayList<>(scored.subList(0, needed));
 
+    // ========== BALANCEAMENTO OPCIONAL DE POSIÇÕES ==========
+    boolean balancePositions = req.requiredPositions() != null && !req.requiredPositions().isEmpty();
+    if (balancePositions) {
+      List<UUID> selectedPlayerIds = selected.stream()
+        .map(sp -> sp.player.getId())
+        .toList();
+
+      // Busca todas as posições dos jogadores selecionados (em lote)
+      List<PlayerPosition> allPositions = playerPositionRepository
+        .findAllByPlayerIdIn(selectedPlayerIds);
+
+      for (UUID posId : req.requiredPositions()) {
+        // Jogadores que possuem essa posição, ordenados do maior rating para o menor
+        List<ScoredPlayer> eligible = selected.stream()
+          .filter(sp -> allPositions.stream().anyMatch(pp ->
+            pp.getPlayerId().equals(sp.player.getId()) && pp.getPositionId().equals(posId)))
+          .sorted(Comparator.comparingDouble(ScoredPlayer::getFinalScore).reversed())
+          .collect(Collectors.toList());
+
+        if (eligible.isEmpty()) continue; // ignora se não houver ninguém com essa posição
+
+        // Distribui com snake draft entre os times que ainda não têm a posição
+        int currentTeam = 0;
+        int direction = 1;
+        for (ScoredPlayer candidate : eligible) {
+          while (currentTeam >= 0 && currentTeam < teams.size()) {
+            TeamBucket team = teams.get(currentTeam);
+            boolean alreadyHas = team.players.stream().anyMatch(sp ->
+              allPositions.stream().anyMatch(pp ->
+                pp.getPlayerId().equals(sp.player.getId()) && pp.getPositionId().equals(posId)));
+            if (!alreadyHas) {
+              if (selected.remove(candidate)) {   // remove de selected para não ser redistribuído
+                team.add(candidate);
+              }
+              currentTeam += direction;
+              break;
+            }
+            currentTeam += direction;
+          }
+          if (currentTeam >= teams.size() || currentTeam < 0) {
+            direction *= -1;
+            currentTeam += direction;
+          }
+        }
+      }
+    }
+    // ========== FIM DO BALANCEAMENTO DE POSIÇÕES ==========
+
+    // Distribuição normal (balanceada por rating) para os jogadores restantes
     for (ScoredPlayer sp : selected) {
       TeamBucket chosen = chooseTeam(teams, sp, req.playersPerTeam(), sexBal, maxMaleDiff);
       chosen.add(sp);
     }
+    // --- FIM DAS ALTERAÇÕES ---
 
-    // Persist session
+    // Persist session (o restante do código permanece igual)
     TeamGenerationSession session = new TeamGenerationSession();
     session.setTenantId(tenant);
     session.setMode("DB");
@@ -162,18 +214,18 @@ public class TeamGenerationService {
     }
 
     var respTeams = teams.stream().map(tb ->
-        new GenerateTeamsResponse.Team(
-            tb.teamIndex,
-            tb.sum,
-            tb.players.stream().map(p ->
-                new GenerateTeamsResponse.PlayerPick(
-                    p.player.getId(),
-                    p.player.getName(),
-                    String.valueOf(p.player.getSex()),
-                    p.getFinalScore()
-                )
-            ).toList()
-        )
+      new GenerateTeamsResponse.Team(
+        tb.teamIndex,
+        tb.sum,
+        tb.players.stream().map(p ->
+          new GenerateTeamsResponse.PlayerPick(
+            p.player.getId(),
+            p.player.getName(),
+            String.valueOf(p.player.getSex()),
+            p.getFinalScore()
+          )
+        ).toList()
+      )
     ).toList();
 
     return new GenerateTeamsResponse(session.getId(), respTeams);

@@ -8,6 +8,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -45,4 +46,7 @@ public class Player {
 
   @Column(name="created_at", nullable=false)
   private OffsetDateTime createdAt = OffsetDateTime.now();
+
+  @OneToMany(mappedBy = "playerId", fetch = FetchType.LAZY)
+  private List<PlayerPosition> positions;
 }

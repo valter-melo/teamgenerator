@@ -4,11 +4,13 @@ import com.boraver.teamgenerator.common.TenantContext;
 import com.boraver.teamgenerator.dto.player.*;
 import com.boraver.teamgenerator.dto.position.PositionResponse;
 import com.boraver.teamgenerator.entity.Player;
+import com.boraver.teamgenerator.entity.PlayerSkillRating;
 import com.boraver.teamgenerator.entity.Skill;
 import com.boraver.teamgenerator.entity.PlayerPosition;
 import com.boraver.teamgenerator.repository.PlayerPositionRepository;
 import com.boraver.teamgenerator.repository.PlayerRepository;
 import com.boraver.teamgenerator.repository.RatingRepository;
+import com.boraver.teamgenerator.repository.SkillRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class PlayerService {
   private final RatingService ratingService;
   private final PlayerPositionRepository playerPositionRepository;
   private final PositionService positionService;
+  private final SkillRepository skillRepository;
 
   private UUID tenantId() {
     return UUID.fromString(Objects.requireNonNull(TenantContext.getTenantId(), "tenant missing"));
@@ -51,7 +54,6 @@ public class PlayerService {
     p.setBirthDate(req.birthDate());
     p = playerRepository.save(p);
 
-    // Salva posições
     if (req.positions() != null && !req.positions().isEmpty()) {
       savePlayerPositions(p.getId(), tenant, req.positions());
     }
@@ -136,15 +138,35 @@ public class PlayerService {
   }
 
   private PlayerResponse toResponse(Player p) {
+    Map<UUID, Integer> currentRatings = ratingService.currentRatingsMap(p.getId());
+
+    double overall = currentRatings.values().stream()
+      .mapToInt(Integer::intValue)
+      .average()
+      .orElse(0.0);
+    overall = Math.round(overall * 10.0) / 10.0;
+
+    Map<String, Integer> ratingsMap = new LinkedHashMap<>();
+    Map<UUID, String> skillNames = skillService.getActiveSkills().stream()
+      .collect(Collectors.toMap(Skill::getId, Skill::getName));
+    for (Map.Entry<UUID, Integer> entry : currentRatings.entrySet()) {
+      String skillName = skillNames.get(entry.getKey());
+      if (skillName != null) {
+        ratingsMap.put(skillName, entry.getValue());
+      }
+    }
+
     return new PlayerResponse(
-            p.getId(),
-            p.getName(),
-            String.valueOf(p.getSex()),
-            p.isActive(),
-            p.getEmail(),
-            p.getPhone(),
-            p.getBirthDate(),
-            getPlayerPositions(p.getId())   // NOVO
+      p.getId(),
+      p.getName(),
+      String.valueOf(p.getSex()),
+      p.isActive(),
+      p.getEmail(),
+      p.getPhone(),
+      p.getBirthDate(),
+      getPlayerPositions(p.getId()),
+      ratingsMap,
+      overall
     );
   }
 
@@ -225,5 +247,71 @@ public class PlayerService {
       ));
     }
     return result;
+  }
+
+  public List<PlayerResponse> listActiveWithRatings() {
+    UUID tenant = tenantId();
+
+    // 1. Todos os jogadores ativos com suas posições
+    List<Player> players = playerRepository.findAllActiveWithPositions(tenant);
+    List<UUID> playerIds = players.stream().map(Player::getId).collect(Collectors.toList());
+
+    // 2. Ratings atuais de todos esses jogadores (uma única consulta)
+    List<PlayerSkillRating> allRatings = ratingRepository.findCurrentRatingsForPlayers(tenant, playerIds);
+
+    // 3. Skills ativas (pode ser cacheado se desejar)
+    List<Skill> skills = skillRepository.findAllByTenantIdAndActiveTrue(tenant);
+    Map<UUID, String> skillNames = skills.stream()
+      .collect(Collectors.toMap(Skill::getId, Skill::getName));
+
+    // 4. Agrupa ratings por jogador
+    Map<UUID, List<PlayerSkillRating>> ratingsByPlayer = allRatings.stream()
+      .collect(Collectors.groupingBy(PlayerSkillRating::getPlayerId));
+
+    // 5. Nomes das posições
+    Map<UUID, String> positionNames = positionService.listActive().stream()
+      .collect(Collectors.toMap(PositionResponse::id, PositionResponse::name));
+
+    // 6. Monta os DTOs
+    return players.stream().map(player -> {
+      List<PlayerSkillRating> playerRatings = ratingsByPlayer.getOrDefault(player.getId(), Collections.emptyList());
+
+      // Média geral
+      double avg = playerRatings.stream()
+        .mapToInt(psr -> (int) psr.getRating())
+        .average()
+        .orElse(0.0);
+      avg = Math.round(avg * 10.0) / 10.0;
+
+      // Mapa de skill -> rating
+      Map<String, Integer> ratingsMap = new LinkedHashMap<>();
+      for (PlayerSkillRating psr : playerRatings) {
+        String skillName = skillNames.get(psr.getSkillId());
+        if (skillName != null) {
+          ratingsMap.put(skillName, (int) psr.getRating());
+        }
+      }
+
+      List<PlayerResponse.PositionInfo> positions = player.getPositions().stream()
+        .sorted(Comparator.comparingInt(PlayerPosition::getPriority))
+        .map(pp -> new PlayerResponse.PositionInfo(
+          pp.getPositionId(),
+          positionNames.getOrDefault(pp.getPositionId(), "?"),
+          pp.getPriority()))
+        .collect(Collectors.toList());
+
+      return new PlayerResponse(
+        player.getId(),
+        player.getName(),
+        String.valueOf(player.getSex()),
+        player.isActive(),
+        player.getEmail(),
+        player.getPhone(),
+        player.getBirthDate(),
+        positions,
+        ratingsMap,
+        avg
+      );
+    }).collect(Collectors.toList());
   }
 }

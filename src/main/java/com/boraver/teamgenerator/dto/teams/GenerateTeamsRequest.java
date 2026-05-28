@@ -9,7 +9,8 @@ public record GenerateTeamsRequest(
     List<SelectedSkill> selectedSkills,
     Map<String, Double> sexMultiplier,
     SexBalance sexBalance,
-    String extrasPolicy
+    String extrasPolicy,
+    List<UUID> requiredPositions
 ) {
   public record SelectedSkill(UUID skillId, double weight) {}
   public record SexBalance(boolean enabled, int maxMaleDiff) {}

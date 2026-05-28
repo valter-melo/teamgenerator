@@ -31,4 +31,12 @@ public interface PlayerRepository extends JpaRepository<Player, UUID> {
     ORDER BY MAX(tgs.created_at) ASC
   """, nativeQuery = true)
   List<Object[]> findInactivePlayersRaw(@Param("tenantId") String tenantId);
+
+  @Query("""
+    SELECT DISTINCT p FROM Player p
+    LEFT JOIN FETCH p.positions
+    WHERE p.tenantId = :tenantId AND p.active = true
+    ORDER BY p.name
+  """)
+  List<Player> findAllActiveWithPositions(@Param("tenantId") UUID tenantId);
 }

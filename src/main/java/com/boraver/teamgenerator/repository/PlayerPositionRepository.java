@@ -14,4 +14,6 @@ public interface PlayerPositionRepository extends JpaRepository<PlayerPosition, 
   @Modifying
   @Query("DELETE FROM PlayerPosition pp WHERE pp.playerId = :playerId")
   void deleteAllByPlayerId(@Param("playerId") UUID playerId);
+
+  List<PlayerPosition> findAllByPlayerIdIn(List<UUID> selectedPlayerIds);
 }
