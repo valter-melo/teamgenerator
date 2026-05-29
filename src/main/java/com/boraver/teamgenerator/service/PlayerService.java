@@ -123,8 +123,7 @@ public class PlayerService {
   }
 
   public List<PlayerResponse> listActive() {
-    Sort sort = Sort.by("name").ascending();
-    return playerRepository.findAllByTenantIdAndActiveTrue(tenantId(), sort).stream().map(this::toResponse).toList();
+    return listActiveWithRatings();
   }
 
   public PlayerResponse get(UUID id) {
@@ -184,29 +183,42 @@ public class PlayerService {
   }
 
   public List<PlayerPerformanceDTO> getPerformanceData(UUID tenantId) {
+    // 1. Jogadores ativos ordenados
     List<Player> players = playerRepository.findAllByTenantIdAndActiveTrue(tenantId, Sort.by("name"));
-    List<Skill> skills = skillService.getActiveSkills();
+    if (players.isEmpty()) return Collections.emptyList();
 
+    List<UUID> playerIds = players.stream().map(Player::getId).collect(Collectors.toList());
+
+    // 2. Skills ativas (cacheável)
+    List<Skill> skills = skillService.getActiveSkills();
     Map<UUID, String> skillNames = skills.stream()
             .collect(Collectors.toMap(Skill::getId, Skill::getName));
 
+    // 3. Ratings atuais de todos os jogadores (1 consulta)
+    List<PlayerSkillRating> allRatings = ratingRepository.findCurrentRatingsForPlayers(tenantId, playerIds);
+    Map<UUID, List<PlayerSkillRating>> ratingsByPlayer = allRatings.stream()
+            .collect(Collectors.groupingBy(PlayerSkillRating::getPlayerId));
+
+    // 4. Última data de atualização de cada jogador (1 consulta)
+    List<Object[]> lastDates = ratingRepository.findLastRatingDatesForPlayers(tenantId, playerIds);
+    Map<UUID, LocalDateTime> lastDateByPlayer = new HashMap<>();
+    for (Object[] row : lastDates) {
+      UUID pid = (UUID) row[0];
+      java.time.OffsetDateTime odt = (java.time.OffsetDateTime) row[1];
+      LocalDateTime date = odt != null ? odt.toLocalDateTime() : null;
+      lastDateByPlayer.put(pid, date);
+    }
+
+    // 5. Processamento em memória
     List<PlayerPerformanceDTO> result = new ArrayList<>();
     for (Player player : players) {
-      Map<UUID, Integer> currentRatings;
-      try {
-        currentRatings = ratingService.currentRatingsMap(player.getId());
-      } catch (Exception e) {
-        currentRatings = Collections.emptyMap();
-      }
+      List<PlayerSkillRating> playerRatings = ratingsByPlayer.getOrDefault(player.getId(), Collections.emptyList());
 
-      // Calcula overall (média simples de todas as skills avaliadas)
-      double avg = currentRatings.values().stream()
-              .filter(v -> v != null)
-              .mapToInt(Integer::intValue)
+      double avg = playerRatings.stream()
+              .mapToInt(psr -> (int) psr.getRating())
               .average()
               .orElse(0.0);
 
-      // Define nível baseado na média
       String nivel;
       if (avg >= 4.5) nivel = "Elite";
       else if (avg >= 4.0) nivel = "Muito alto";
@@ -215,24 +227,24 @@ public class PlayerService {
       else if (avg >= 2.0) nivel = "A desenvolver";
       else nivel = "Iniciante";
 
-      // Melhor e pior habilidade
       String bestSkill = null, worstSkill = null;
       int max = Integer.MIN_VALUE, min = Integer.MAX_VALUE;
-      for (Map.Entry<UUID, Integer> entry : currentRatings.entrySet()) {
-        int val = entry.getValue();
-        if (val > max) { max = val; bestSkill = skillNames.get(entry.getKey()); }
-        if (val < min) { min = val; worstSkill = skillNames.get(entry.getKey()); }
-      }
-
-      // Converte para o DTO com nomes das skills
       Map<String, Integer> skillsMap = new LinkedHashMap<>();
-      for (Map.Entry<UUID, Integer> entry : currentRatings.entrySet()) {
-        String skillName = skillNames.get(entry.getKey());
-        if (skillName != null) skillsMap.put(skillName, entry.getValue());
+
+      for (PlayerSkillRating psr : playerRatings) {
+        String skillName = skillNames.get(psr.getSkillId());
+        if (skillName != null) {
+          int rating = (int) psr.getRating();
+          skillsMap.put(skillName, rating);
+          if (rating > max) { max = rating; bestSkill = skillName; }
+          if (rating < min) { min = rating; worstSkill = skillName; }
+        }
       }
 
-      // Data da última atualização – buscamos a data mais recente entre os ratings
-      LocalDateTime lastUpdate = ratingRepository.findLastRatingDateByPlayerId(player.getId());
+      LocalDateTime lastUpdate = lastDateByPlayer.get(player.getId());
+      String lastUpdateStr = lastUpdate != null
+              ? lastUpdate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+              : "—";
 
       result.add(new PlayerPerformanceDTO(
               player.getId(),
@@ -240,10 +252,10 @@ public class PlayerService {
               String.valueOf(player.getSex()),
               Math.round(avg * 10.0) / 10.0,
               nivel,
-              bestSkill,
-              worstSkill,
+              bestSkill != null ? bestSkill : "N/A",
+              worstSkill != null ? worstSkill : "N/A",
               skillsMap,
-              lastUpdate != null ? lastUpdate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "—"
+              lastUpdateStr
       ));
     }
     return result;
