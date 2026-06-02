@@ -16,7 +16,7 @@ public class JwtService {
     this.expirationMs = expirationMs;
   }
 
-  public String generateToken(String userId, String tenantId, String role, String email) {
+  public String generateToken(String userId, String tenantId, String role, String email, String userName) {
     var now = new Date();
     var exp = new Date(now.getTime() + expirationMs);
 
@@ -27,7 +27,8 @@ public class JwtService {
         .addClaims(Map.of(
             "tenant_id", tenantId,
             "role", role,
-            "email", email
+            "email", email,
+            "user_name", userName
         ))
         .signWith(key, SignatureAlgorithm.HS256)
         .compact();

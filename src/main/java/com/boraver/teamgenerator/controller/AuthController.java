@@ -23,52 +23,59 @@ public class AuthController {
   @PostMapping("/register-tenant")
   @Operation(summary = "Registrar novo usuário")
   @ApiResponses(value = {
-      @ApiResponse(responseCode = "200", description = "Resgistro bem sucedido"),
-      @ApiResponse(responseCode = "4400", description = "Email já cadastrado")
+          @ApiResponse(responseCode = "200", description = "Resgistro bem sucedido"),
+          @ApiResponse(responseCode = "400", description = "Email já cadastrado")
   })
   public AuthResponse registerTenant(@Valid @RequestBody RegisterTenantRequest req) {
     var created = authService.registerTenantWithAdmin(
-        req.tenantName(),
-        req.tenantSlug(),
-        req.adminName(),
-        req.email(),
-        req.password()
+            req.tenantName(),
+            req.tenantSlug(),
+            req.adminName(),
+            req.email(),
+            req.password()
     );
 
-    var login = authService.login(created.tenantId(), req.email(), req.password());
-
+    // O created já tem o nome do admin (req.adminName())
     return new AuthResponse(
-        login.token(),
-        created.tenantId().toString(),
-        created.userId().toString(),
-        created.role()
+            created.token(),
+            created.tenantId().toString(),
+            created.userId().toString(),
+            created.role(),
+            created.userName()  // ← ADICIONADO
     );
   }
 
   @PostMapping("/login")
   @Operation(summary = "Login de usuário")
-  @ApiResponses(value = {
-      @ApiResponse(responseCode = "200", description = "Login bem-sucedido"),
-      @ApiResponse(responseCode = "401", description = "Credenciais inválidas")
-  })
   public AuthResponse login(@Valid @RequestBody LoginRequest req) {
-    var result = authService.login(UUID.fromString(req.tenantId()), req.email(), req.password());
-    return new AuthResponse(result.token(), result.tenantId().toString(), result.userId().toString(), result.role());
+    var result = authService.login(
+            UUID.fromString(req.tenantId()),
+            req.email(),
+            req.password()
+    );
+    return new AuthResponse(
+            result.token(),
+            result.tenantId().toString(),
+            result.userId().toString(),
+            result.role(),
+            result.userName()  // ← JÁ CORRETO
+    );
   }
 
   @PostMapping("/login-by-slug")
   @Operation(summary = "Login de usuário com tenant")
   @ApiResponses(value = {
-      @ApiResponse(responseCode = "200", description = "Login bem-sucedido"),
-      @ApiResponse(responseCode = "401", description = "Credenciais inválidas")
+          @ApiResponse(responseCode = "200", description = "Login bem-sucedido"),
+          @ApiResponse(responseCode = "401", description = "Credenciais inválidas")
   })
   public AuthResponse loginBySlug(@Valid @RequestBody LoginBySlugRequest req) {
     var result = authService.loginBySlug(req.tenantSlug(), req.email(), req.password());
     return new AuthResponse(
-        result.token(),
-        result.tenantId().toString(),
-        result.userId().toString(),
-        result.role()
+            result.token(),
+            result.tenantId().toString(),
+            result.userId().toString(),
+            result.role(),
+            result.userName()  // ← ADICIONADO
     );
   }
 }

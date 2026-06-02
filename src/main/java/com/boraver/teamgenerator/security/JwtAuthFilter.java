@@ -73,6 +73,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       // Token válido - continua a requisição
       filterChain.doFilter(request, response);
 
+
     } catch (Exception e) {
       // Token inválido ou expirado - retorna 401
       SecurityContextHolder.clearContext();

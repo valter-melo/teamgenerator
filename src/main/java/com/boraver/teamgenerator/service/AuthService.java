@@ -25,12 +25,12 @@ public class AuthService {
   }
 
   @Transactional
-  public AuthCreated registerTenantWithAdmin(
-      String tenantName,
-      String tenantSlug,
-      String adminName,
-      String email,
-      String password
+  public LoginResult registerTenantWithAdmin(
+          String tenantName,
+          String tenantSlug,
+          String adminName,
+          String email,
+          String password
   ) {
     String slug = normalizeSlug(tenantSlug);
     String normEmail = email.trim().toLowerCase();
@@ -53,7 +53,22 @@ public class AuthService {
     u.setActive(true);
     userRepo.save(u);
 
-    return new AuthCreated(t.getId(), u.getId(), u.getRole(), u.getEmail());
+    // Gera o token JWT para o usuário recém-criado
+    String token = jwt.generateToken(
+            u.getId().toString(),
+            u.getTenantId().toString(),
+            u.getRole(),
+            u.getEmail(),
+            u.getName()
+    );
+
+    return new LoginResult(
+            token,
+            u.getTenantId(),
+            u.getId(),
+            u.getRole(),
+            u.getName()  // ← nome do administrador
+    );
   }
 
   private static String normalizeSlug(String raw) {
@@ -65,23 +80,29 @@ public class AuthService {
     return s;
   }
 
-
   public LoginResult login(UUID tenantId, String email, String password) {
     AppUser user = userRepo.findByTenantIdAndEmail(tenantId, email)
-        .orElseThrow(() -> new SecurityException("Invalid credentials"));
+            .orElseThrow(() -> new SecurityException("Invalid credentials"));
 
     if (!user.isActive() || !encoder.matches(password, user.getPasswordHash())) {
       throw new SecurityException("Invalid credentials");
     }
 
     String token = jwt.generateToken(
-        user.getId().toString(),
-        user.getTenantId().toString(),
-        user.getRole(),
-        user.getEmail()
+            user.getId().toString(),
+            user.getTenantId().toString(),
+            user.getRole(),
+            user.getEmail(),
+            user.getName()
     );
 
-    return new LoginResult(token, user.getTenantId(), user.getId(), user.getRole());
+    return new LoginResult(
+            token,
+            user.getTenantId(),
+            user.getId(),
+            user.getRole(),
+            user.getName()
+    );
   }
 
   public LoginResult loginBySlug(String tenantSlug, String email, String password) {
@@ -93,5 +114,5 @@ public class AuthService {
   }
 
   public record AuthCreated(UUID tenantId, UUID userId, String role, String email) {}
-  public record LoginResult(String token, UUID tenantId, UUID userId, String role) {}
+  public record LoginResult(String token, UUID tenantId, UUID userId, String role, String userName) {}
 }
