@@ -32,4 +32,12 @@ public class Tenant {
   @Column(name = "created_at", nullable = false)
   private OffsetDateTime createdAt = OffsetDateTime.now();
 
+  @Column(name = "logo_url", length = 255)
+  private String logoUrl;
+
+  @Column(name = "primary_color", nullable = false, length = 7)
+  private String primaryColor = "#2bd96b";
+
+  @Column(name = "secondary_color", nullable = false, length = 7)
+  private String secondaryColor = "#1a1a1a";
 }

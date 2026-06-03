@@ -41,7 +41,10 @@ public class AuthController {
             created.tenantId().toString(),
             created.userId().toString(),
             created.role(),
-            created.userName()  // ← ADICIONADO
+            created.userName(),
+            created.logoUrl(),
+            created.primaryColor(),
+            created.secondaryColor()
     );
   }
 
@@ -58,7 +61,10 @@ public class AuthController {
             result.tenantId().toString(),
             result.userId().toString(),
             result.role(),
-            result.userName()  // ← JÁ CORRETO
+            result.userName(),
+            result.logoUrl(),
+            result.primaryColor(),
+            result.secondaryColor()
     );
   }
 
@@ -75,7 +81,10 @@ public class AuthController {
             result.tenantId().toString(),
             result.userId().toString(),
             result.role(),
-            result.userName()  // ← ADICIONADO
+            result.userName(),
+            result.logoUrl(),
+            result.primaryColor(),
+            result.secondaryColor()
     );
   }
 }

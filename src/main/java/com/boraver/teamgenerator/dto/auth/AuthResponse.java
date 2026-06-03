@@ -5,5 +5,8 @@ public record AuthResponse(
         String tenantId,
         String userId,
         String role,
-        String userName
+        String userName,
+        String logoUrl,
+        String primaryColor,
+        String secondaryColor
 ) {}

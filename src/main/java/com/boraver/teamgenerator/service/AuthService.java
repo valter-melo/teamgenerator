@@ -17,7 +17,8 @@ public class AuthService {
   private final PasswordEncoder encoder;
   private final JwtService jwt;
 
-  public AuthService(TenantRepository tenantRepo, AppUserRepository userRepo, PasswordEncoder encoder, JwtService jwt) {
+  public AuthService(TenantRepository tenantRepo, AppUserRepository userRepo,
+                     PasswordEncoder encoder, JwtService jwt) {
     this.tenantRepo = tenantRepo;
     this.userRepo = userRepo;
     this.encoder = encoder;
@@ -26,12 +27,12 @@ public class AuthService {
 
   @Transactional
   public LoginResult registerTenantWithAdmin(
-          String tenantName,
-          String tenantSlug,
-          String adminName,
-          String email,
-          String password
-  ) {
+    String tenantName,
+    String tenantSlug,
+    String adminName,
+    String email,
+    String password) {
+
     String slug = normalizeSlug(tenantSlug);
     String normEmail = email.trim().toLowerCase();
 
@@ -53,22 +54,55 @@ public class AuthService {
     u.setActive(true);
     userRepo.save(u);
 
-    // Gera o token JWT para o usuário recém-criado
     String token = jwt.generateToken(
-            u.getId().toString(),
-            u.getTenantId().toString(),
-            u.getRole(),
-            u.getEmail(),
-            u.getName()
-    );
+      u.getId().toString(),
+      u.getTenantId().toString(),
+      u.getRole(),
+      u.getEmail(),
+      u.getName());
 
+    return buildLoginResult(token, u, t);
+  }
+
+  public LoginResult login(UUID tenantId, String email, String password) {
+    AppUser user = userRepo.findByTenantIdAndEmail(tenantId, email)
+      .orElseThrow(() -> new SecurityException("Invalid credentials"));
+
+    if (!user.isActive() || !encoder.matches(password, user.getPasswordHash())) {
+      throw new SecurityException("Invalid credentials");
+    }
+
+    String token = jwt.generateToken(
+      user.getId().toString(),
+      user.getTenantId().toString(),
+      user.getRole(),
+      user.getEmail(),
+      user.getName());
+
+    Tenant tenant = tenantRepo.findById(tenantId)
+      .orElseThrow(() -> new IllegalStateException("Tenant não encontrado"));
+
+    return buildLoginResult(token, user, tenant);
+  }
+
+  public LoginResult loginBySlug(String tenantSlug, String email, String password) {
+    var slug = tenantSlug.trim().toLowerCase();
+    var tenant = tenantRepo.findBySlug(slug)
+      .orElseThrow(() -> new IllegalArgumentException("Grupo não encontrado"));
+
+    return login(tenant.getId(), email, password);
+  }
+
+  private LoginResult buildLoginResult(String token, AppUser user, Tenant tenant) {
     return new LoginResult(
-            token,
-            u.getTenantId(),
-            u.getId(),
-            u.getRole(),
-            u.getName()  // ← nome do administrador
-    );
+      token,
+      user.getTenantId(),
+      user.getId(),
+      user.getRole(),
+      user.getName(),
+      tenant.getLogoUrl(),
+      tenant.getPrimaryColor(),
+      tenant.getSecondaryColor());
   }
 
   private static String normalizeSlug(String raw) {
@@ -80,39 +114,15 @@ public class AuthService {
     return s;
   }
 
-  public LoginResult login(UUID tenantId, String email, String password) {
-    AppUser user = userRepo.findByTenantIdAndEmail(tenantId, email)
-            .orElseThrow(() -> new SecurityException("Invalid credentials"));
+  // ==================== Records ====================
 
-    if (!user.isActive() || !encoder.matches(password, user.getPasswordHash())) {
-      throw new SecurityException("Invalid credentials");
-    }
-
-    String token = jwt.generateToken(
-            user.getId().toString(),
-            user.getTenantId().toString(),
-            user.getRole(),
-            user.getEmail(),
-            user.getName()
-    );
-
-    return new LoginResult(
-            token,
-            user.getTenantId(),
-            user.getId(),
-            user.getRole(),
-            user.getName()
-    );
-  }
-
-  public LoginResult loginBySlug(String tenantSlug, String email, String password) {
-    var slug = tenantSlug.trim().toLowerCase();
-    var tenant = tenantRepo.findBySlug(slug)
-        .orElseThrow(() -> new IllegalArgumentException("Grupo não encontrado"));
-
-    return login(tenant.getId(), email, password);
-  }
-
-  public record AuthCreated(UUID tenantId, UUID userId, String role, String email) {}
-  public record LoginResult(String token, UUID tenantId, UUID userId, String role, String userName) {}
+  public record LoginResult(
+    String token,
+    UUID tenantId,
+    UUID userId,
+    String role,
+    String userName,
+    String logoUrl,
+    String primaryColor,
+    String secondaryColor) {}
 }
