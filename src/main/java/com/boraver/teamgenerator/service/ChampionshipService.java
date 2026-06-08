@@ -84,6 +84,9 @@ public class ChampionshipService {
     championship.setGenerationSession(teamGen);
     championship.setStatus("CREATED");
     championship.setMatchesType(request.matchesType());
+    championship.setDefaultSetsToWin(request.setsToWin());
+    championship.setDefaultPointsPerSet(request.pointsPerSet());
+    championship.setDefaultTieBreakPoints(request.tieBreakPoints());
 
     Map<Integer, String> teamNames = request.teamNames();
 
@@ -129,6 +132,9 @@ public class ChampionshipService {
     championship.setQualifiedPerGroup(request.qualifiedPerGroup());
     championship.setGroupsCount(request.groupsCount());
     championship.setTeamCount(generatedTeams.size());
+    championship.setDefaultSetsToWin(request.setsToWin());
+    championship.setDefaultPointsPerSet(request.pointsPerSet());
+    championship.setDefaultTieBreakPoints(request.tieBreakPoints());
     championship = championshipRepository.save(championship);
 
     createGroupsFromPredefined(championship, generatedTeams, teamGroupMap,
@@ -188,6 +194,9 @@ public class ChampionshipService {
           match1.setStage("GROUP");
           match1.setHomeTeamIndex(teamA.getTeamIndex());
           match1.setAwayTeamIndex(teamB.getTeamIndex());
+          match1.setSetsToWin(championship.getDefaultSetsToWin());
+          match1.setPointsPerSet(championship.getDefaultPointsPerSet());
+          match1.setTieBreakPoints(championship.getDefaultTieBreakPoints());
           championshipMatchRepository.save(match1);
           matchRound++;
           if ("HOME_AND_AWAY".equals(championship.getMatchesType())) {
@@ -197,6 +206,9 @@ public class ChampionshipService {
             match2.setRound(matchRound);
             match2.setHomeTeamIndex(teamB.getTeamIndex());
             match2.setAwayTeamIndex(teamA.getTeamIndex());
+            match2.setSetsToWin(championship.getDefaultSetsToWin());
+            match2.setPointsPerSet(championship.getDefaultPointsPerSet());
+            match2.setTieBreakPoints(championship.getDefaultTieBreakPoints());
             championshipMatchRepository.save(match2);
             matchRound++;
           }
@@ -287,6 +299,9 @@ public class ChampionshipService {
           match1.setStage("GROUP");
           match1.setHomeTeamIndex(teamA.getTeamIndex());
           match1.setAwayTeamIndex(teamB.getTeamIndex());
+          match1.setSetsToWin(championship.getDefaultSetsToWin());
+          match1.setPointsPerSet(championship.getDefaultPointsPerSet());
+          match1.setTieBreakPoints(championship.getDefaultTieBreakPoints());
           championshipMatchRepository.save(match1);
           matchRound++;
           if ("HOME_AND_AWAY".equals(championship.getMatchesType())) {
@@ -296,6 +311,9 @@ public class ChampionshipService {
             match2.setRound(matchRound);
             match2.setHomeTeamIndex(teamB.getTeamIndex());
             match2.setAwayTeamIndex(teamA.getTeamIndex());
+            match2.setSetsToWin(championship.getDefaultSetsToWin());
+            match2.setPointsPerSet(championship.getDefaultPointsPerSet());
+            match2.setTieBreakPoints(championship.getDefaultTieBreakPoints());
             championshipMatchRepository.save(match2);
             matchRound++;
           }
@@ -454,20 +472,68 @@ public class ChampionshipService {
       if (request.winnerTeamIndex().equals(match.getHomeTeamIndex())) {
         match.setHomeScore(pointsForWinner);
         match.setAwayScore(0);
+        match.setHomeSetsWon(match.getSetsToWin());   // ← USA O VALOR DA PARTIDA
+        match.setAwaySetsWon(0);
       } else {
         match.setHomeScore(0);
         match.setAwayScore(pointsForWinner);
+        match.setHomeSetsWon(0);
+        match.setAwaySetsWon(match.getSetsToWin());   // ← USA O VALOR DA PARTIDA
       }
       match.setWinnerTeamIndex(request.winnerTeamIndex());
     } else {
-      match.setHomeScore(request.homeScore());
-      match.setAwayScore(request.awayScore());
-      if (request.homeScore() > request.awayScore()) {
-        match.setWinnerTeamIndex(match.getHomeTeamIndex());
-      } else if (request.homeScore() < request.awayScore()) {
-        match.setWinnerTeamIndex(match.getAwayTeamIndex());
+      // Registro de sets (se fornecidos)
+      if (request.sets() != null && !request.sets().isEmpty()) {
+        match.getSets().clear();
+        int homeSets = 0, awaySets = 0;
+        int setsToWin = match.getSetsToWin();
+
+        for (MatchResultRequest.SetResult sr : request.sets()) {
+          MatchSet ms = new MatchSet();
+          ms.setMatch(match);
+          ms.setSetNumber(sr.setNumber());
+          ms.setHomeScore(sr.homeScore());
+          ms.setAwayScore(sr.awayScore());
+          match.getSets().add(ms);
+
+          if (sr.homeScore() > sr.awayScore()) homeSets++;
+          else if (sr.awayScore() > sr.homeScore()) awaySets++;
+        }
+
+        match.setHomeSetsWon(homeSets);
+        match.setAwaySetsWon(awaySets);
+
+        // Define o vencedor baseado nos sets
+        if (homeSets >= setsToWin) {
+          match.setWinnerTeamIndex(match.getHomeTeamIndex());
+        } else if (awaySets >= setsToWin) {
+          match.setWinnerTeamIndex(match.getAwayTeamIndex());
+        } else {
+          match.setWinnerTeamIndex(null);
+        }
+
+        // Placar total (soma dos pontos de todos os sets)
+        int totalHomeScore = request.sets().stream().mapToInt(MatchResultRequest.SetResult::homeScore).sum();
+        int totalAwayScore = request.sets().stream().mapToInt(MatchResultRequest.SetResult::awayScore).sum();
+        match.setHomeScore(totalHomeScore);
+        match.setAwayScore(totalAwayScore);
       } else {
-        match.setWinnerTeamIndex(null);
+        // Compatibilidade com versão antiga (sem sets)
+        match.setHomeScore(request.homeScore());
+        match.setAwayScore(request.awayScore());
+        if (request.homeScore() > request.awayScore()) {
+          match.setWinnerTeamIndex(match.getHomeTeamIndex());
+          match.setHomeSetsWon(match.getSetsToWin());
+          match.setAwaySetsWon(0);
+        } else if (request.homeScore() < request.awayScore()) {
+          match.setWinnerTeamIndex(match.getAwayTeamIndex());
+          match.setHomeSetsWon(0);
+          match.setAwaySetsWon(match.getSetsToWin());
+        } else {
+          match.setWinnerTeamIndex(null);
+          match.setHomeSetsWon(0);
+          match.setAwaySetsWon(0);
+        }
       }
     }
 
@@ -477,6 +543,22 @@ public class ChampionshipService {
 
     if ("GROUP".equals(match.getStage())) {
       updateStandings(championshipId, match, isWalkover, request.woWinnerPoints());
+    }
+
+    // SSE payload enriquecido
+    Map<String, Object> update = new HashMap<>();
+    update.put("type", "MATCH_RESULT_REGISTERED");
+    update.put("matchId", match.getId());
+    update.put("homeScore", match.getHomeScore());
+    update.put("awayScore", match.getAwayScore());
+    update.put("homeSetsWon", match.getHomeSetsWon());
+    update.put("awaySetsWon", match.getAwaySetsWon());
+    update.put("played", true);
+    update.put("winnerTeamIndex", match.getWinnerTeamIndex());
+    update.put("stage", match.getStage());
+    update.put("walkover", isWalkover);
+    if (match.getGroupIndex() != null) {
+      update.put("groupIndex", match.getGroupIndex());
     }
 
     checkAndFinishChampionship(championshipId);
@@ -628,6 +710,9 @@ public class ChampionshipService {
         match.setHomeTeamIndex(home.getTeamIndex());
         match.setAwayTeamIndex(away.getTeamIndex());
         match.setStatus("pending");
+        match.setSetsToWin(championship.getDefaultSetsToWin());
+        match.setPointsPerSet(championship.getDefaultPointsPerSet());
+        match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
         knockoutMatches.add(match);
       }
     }
@@ -675,6 +760,9 @@ public class ChampionshipService {
     thirdPlace.setHomeTeamIndex(losers.get(0));
     thirdPlace.setAwayTeamIndex(losers.get(1));
     thirdPlace.setStatus("pending");
+    thirdPlace.setSetsToWin(championship.getDefaultSetsToWin());
+    thirdPlace.setPointsPerSet(championship.getDefaultPointsPerSet());
+    thirdPlace.setTieBreakPoints(championship.getDefaultTieBreakPoints());
     championshipMatchRepository.save(thirdPlace);
   }
 
@@ -787,10 +875,17 @@ public class ChampionshipService {
     homeStanding.setPlayed(homeStanding.getPlayed() + 1);
     awayStanding.setPlayed(awayStanding.getPlayed() + 1);
 
+    // Gols (pontos totais)
     homeStanding.setGoalsFor(homeStanding.getGoalsFor() + match.getHomeScore());
     homeStanding.setGoalsAgainst(homeStanding.getGoalsAgainst() + match.getAwayScore());
     awayStanding.setGoalsFor(awayStanding.getGoalsFor() + match.getAwayScore());
     awayStanding.setGoalsAgainst(awayStanding.getGoalsAgainst() + match.getHomeScore());
+
+    // Sets
+    homeStanding.setSetsWon(homeStanding.getSetsWon() + match.getHomeSetsWon());
+    homeStanding.setSetsLost(homeStanding.getSetsLost() + match.getAwaySetsWon());
+    awayStanding.setSetsWon(awayStanding.getSetsWon() + match.getAwaySetsWon());
+    awayStanding.setSetsLost(awayStanding.getSetsLost() + match.getHomeSetsWon());
 
     int homePoints = 0;
     int awayPoints = 0;
@@ -827,8 +922,14 @@ public class ChampionshipService {
     homeStanding.setPoints(homeStanding.getPoints() + homePoints);
     awayStanding.setPoints(awayStanding.getPoints() + awayPoints);
 
+    // Saldo de pontos
     homeStanding.setGoalsDifference(homeStanding.getGoalsFor() - homeStanding.getGoalsAgainst());
     awayStanding.setGoalsDifference(awayStanding.getGoalsFor() - awayStanding.getGoalsAgainst());
+
+    // Saldo de sets
+    homeStanding.setSetsDifference(homeStanding.getSetsWon() - homeStanding.getSetsLost());
+    awayStanding.setSetsDifference(awayStanding.getSetsWon() - awayStanding.getSetsLost());
+
     homeStanding.setLastUpdate(LocalDateTime.now());
     awayStanding.setLastUpdate(LocalDateTime.now());
 
@@ -895,7 +996,8 @@ public class ChampionshipService {
                           ct.getTeamIndex(),
                           groupIdx,
                           0, 0, 0, 0, 0, 0, 0, 0,
-                          nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex()));
+                          nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex()),
+                          0, 0, 0);
                 }
               })
               .sorted(Comparator
@@ -949,14 +1051,16 @@ public class ChampionshipService {
                       ct.getTeamIndex(),
                       ct.getGroupIndex(),
                       0, 0, 0, 0, 0, 0, 0, 0,
-                      nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex())))
+                      nameMap.getOrDefault(ct.getTeamIndex(), "Time " + ct.getTeamIndex()),
+                      0, 0, 0))  // ← ADICIONE setsWon, setsLost, setsDifference
               .collect(Collectors.toList());
     }
 
     standings.sort(Comparator
             .comparingInt(ChampionshipStandings::getPoints).reversed()
-            .thenComparing(Comparator.comparingInt(ChampionshipStandings::getGoalsDifference).reversed())
-            .thenComparing(Comparator.comparingInt(ChampionshipStandings::getGoalsFor).reversed())
+            .thenComparingInt(ChampionshipStandings::getSetsDifference).reversed()   // NOVO
+            .thenComparingInt(ChampionshipStandings::getGoalsDifference).reversed()
+            .thenComparingInt(ChampionshipStandings::getGoalsFor).reversed()
             .thenComparingInt(ChampionshipStandings::getTeamIndex));
 
     return standings.stream()
@@ -971,7 +1075,10 @@ public class ChampionshipService {
                     s.getGoalsFor(),
                     s.getGoalsAgainst(),
                     s.getGoalsDifference(),
-                    nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex())))
+                    nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex()),
+                    s.getSetsWon(),
+                    s.getSetsLost(),
+                    s.getSetsDifference()))
             .collect(Collectors.toList());
   }
 
@@ -1049,7 +1156,10 @@ public class ChampionshipService {
             s.getGoalsFor(),
             s.getGoalsAgainst(),
             s.getGoalsDifference(),
-            nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex())
+            nameMap.getOrDefault(s.getTeamIndex(), "Time " + s.getTeamIndex()),
+            s.getSetsWon(),
+            s.getSetsLost(),
+            s.getSetsDifference()
     );
   }
 
@@ -1061,7 +1171,12 @@ public class ChampionshipService {
             m.isPlayed(), m.getWinnerTeamIndex(),
             generationSessionId, m.getStage(),
             teamNameMap.getOrDefault(m.getHomeTeamIndex(), "Time " + m.getHomeTeamIndex()),
-            teamNameMap.getOrDefault(m.getAwayTeamIndex(), "Time " + m.getAwayTeamIndex())
+            teamNameMap.getOrDefault(m.getAwayTeamIndex(), "Time " + m.getAwayTeamIndex()),
+            m.getSetsToWin(),
+            m.getPointsPerSet(),
+            m.getTieBreakPoints(),
+            m.getHomeSetsWon(),
+            m.getAwaySetsWon()
     );
   }
 

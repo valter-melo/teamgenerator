@@ -8,10 +8,13 @@ import java.util.UUID;
 public record SaveManualTeamsRequest(
     @NotEmpty String name,
     int groupsCount,
-    String matchesType,  // "SINGLE" ou "HOME_AND_AWAY"
+    String matchesType,
     int qualifiedPerGroup,
     @NotEmpty List<ManualTeamDTO> teams,
-    Map<Integer, String> teamNames
+    Map<Integer, String> teamNames,
+    int setsToWin,
+    int pointsPerSet,
+    int tieBreakPoints
 ) {
   public record ManualTeamDTO(
       int teamIndex,

@@ -24,6 +24,8 @@ public class EmailService {
         "https://rando.esp.br/verify?token=123456\n\n" +
         "Se você não solicitou essa verificação, ignore este e‑mail.\n\n" +
         "Atenciosamente,\nEquipe R4ANDO");
+
+      mailSender.send(msg);
     } catch (Exception e) {
       response = e.getMessage();
     }

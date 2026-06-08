@@ -61,4 +61,13 @@ public class Championship {
 
   @Column(nullable = false)
   private String format;
+
+  @Column(name = "default_sets_to_win", nullable = false)
+  private int defaultSetsToWin = 2;
+
+  @Column(name = "default_points_per_set", nullable = false)
+  private int defaultPointsPerSet = 25;
+
+  @Column(name = "default_tie_break_points", nullable = false)
+  private int defaultTieBreakPoints = 15;
 }

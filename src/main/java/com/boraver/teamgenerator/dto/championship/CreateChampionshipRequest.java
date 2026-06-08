@@ -15,5 +15,8 @@ public record CreateChampionshipRequest(
     Integer groupsCount, // usado se format = "GROUPS"
     Integer teamsPerGroup, // pode ser calculado ou informado? Normalmente é automático
     Integer qualifiedPerGroup, // usado se format = "GROUPS"
-    Map<Integer, String> teamNames
+    Map<Integer, String> teamNames,
+    int setsToWin,
+    int pointsPerSet,
+    int tieBreakPoints
 ) {}

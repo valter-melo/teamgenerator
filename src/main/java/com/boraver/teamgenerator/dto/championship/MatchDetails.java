@@ -15,5 +15,10 @@ public record MatchDetails(
     UUID generationSessionId,
     String stage,
     String homeTeamName,
-    String awayTeamName
+    String awayTeamName,
+    int setsToWin,
+    int pointsPerSet,
+    int tieBreakPoints,
+    int homeSetsWon,
+    int awaySetsWon
 ) {}

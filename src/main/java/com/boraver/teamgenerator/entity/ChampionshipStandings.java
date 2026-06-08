@@ -39,4 +39,13 @@ public class ChampionshipStandings {
 
   @Column(name = "last_update")
   private LocalDateTime lastUpdate;
+
+  @Column(name = "sets_won", nullable = false)
+  private int setsWon = 0;
+
+  @Column(name = "sets_lost", nullable = false)
+  private int setsLost = 0;
+
+  @Column(name = "sets_difference", nullable = false)
+  private int setsDifference = 0;
 }

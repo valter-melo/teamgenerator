@@ -6,6 +6,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -58,4 +60,22 @@ public class ChampionshipMatch {
 
   @Column(name = "stage")
   private String stage;
+
+  @Column(name = "sets_to_win", nullable = false)
+  private int setsToWin = 2;
+
+  @Column(name = "points_per_set", nullable = false)
+  private int pointsPerSet = 25;
+
+  @Column(name = "tie_break_points", nullable = false)
+  private int tieBreakPoints = 15;
+
+  @Column(name = "home_sets_won", nullable = false)
+  private int homeSetsWon = 0;
+
+  @Column(name = "away_sets_won", nullable = false)
+  private int awaySetsWon = 0;
+
+  @OneToMany(mappedBy = "match", cascade = CascadeType.ALL, orphanRemoval = true)
+  private List<MatchSet> sets = new ArrayList<>();
 }

@@ -1,6 +1,8 @@
 package com.boraver.teamgenerator.dto.championship;
 
 import jakarta.validation.constraints.NotNull;
+
+import java.util.List;
 import java.util.UUID;
 
 public record MatchResultRequest(
@@ -9,5 +11,8 @@ public record MatchResultRequest(
         int awayScore,
         Boolean walkover,
         Integer winnerTeamIndex,
-        Integer woWinnerPoints
-) {}
+        Integer woWinnerPoints,
+        List<SetResult> sets
+) {
+  public record SetResult(int setNumber, int homeScore, int awayScore) {}
+}

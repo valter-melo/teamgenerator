@@ -11,5 +11,8 @@ public record StandingEntry(
     int goalsFor,
     int goalsAgainst,
     int goalsDifference,
-    String teamName
+    String teamName,
+    int setsWon,
+    int setsLost,
+    int setsDifference
 ) {}
