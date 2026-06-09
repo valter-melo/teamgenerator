@@ -14,7 +14,8 @@ public record SaveManualTeamsRequest(
     Map<Integer, String> teamNames,
     int setsToWin,
     int pointsPerSet,
-    int tieBreakPoints
+    int tieBreakPoints,
+    String format
 ) {
   public record ManualTeamDTO(
       int teamIndex,

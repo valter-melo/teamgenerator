@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface ChampionshipStandingsRepository extends JpaRepository<ChampionshipStandings, UUID> {
   List<ChampionshipStandings> findByChampionshipIdOrderByGroupIndexAscPointsDescGoalsDifferenceDescGoalsForAsc(UUID championshipId);
   Optional<ChampionshipStandings> findByChampionshipIdAndTeamIndex(UUID championshipId, int teamIndex);
+  List<ChampionshipStandings> findByChampionshipIdOrderByGroupIndexAscPointsDescSetsDifferenceDescGoalsDifferenceDescGoalsForAsc(UUID championshipId);
 }

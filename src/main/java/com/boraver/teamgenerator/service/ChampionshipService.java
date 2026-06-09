@@ -101,6 +101,9 @@ public class ChampionshipService {
         }
         break;
       case "KNOCKOUT":
+        championship.setStatus("IN_PROGRESS"); // ou mantenha "CREATED"
+        championship.setGroupsCount(0);        // sem grupos
+        championship.setQualifiedPerGroup(0);  // sem classificados por grupo
         createKnockoutFormat(championship, generatedTeams, teamNames);
         break;
       case "LEAGUE":
@@ -124,7 +127,7 @@ public class ChampionshipService {
     Championship championship = new Championship();
     championship.setTenantId(tenantId);
     championship.setName(request.name());
-    championship.setFormat("GROUPS");
+    championship.setFormat(request.format() != null ? request.format() : "GROUPS");
     championship.setGenerationSession(session);
     championship.setStatus("CREATED");
     championship.setMatchesType(request.matchesType());
@@ -136,8 +139,13 @@ public class ChampionshipService {
     championship.setDefaultTieBreakPoints(request.tieBreakPoints());
     championship = championshipRepository.save(championship);
 
-    createGroupsFromPredefined(championship, generatedTeams, teamGroupMap,
-            request.groupsCount(), request.qualifiedPerGroup(), teamNames);
+    if ("KNOCKOUT".equals(championship.getFormat())) {
+      createKnockoutFormat(championship, generatedTeams, teamNames);
+    } else {
+      createGroupsFromPredefined(championship, generatedTeams, teamGroupMap,
+              request.groupsCount(), request.qualifiedPerGroup(), teamNames);
+    }
+
     return championship;
   }
 
@@ -329,25 +337,59 @@ public class ChampionshipService {
   private void createKnockoutFormat(Championship championship, List<GeneratedTeam> generatedTeams,
                                     Map<Integer, String> teamNames) {
     int teamCount = generatedTeams.size();
-    if (teamCount % 4 != 0) {
-      throw new IllegalArgumentException("Número de times (" + teamCount + ") deve ser múltiplo de 4 para eliminatórias");
+    if (teamCount % 2 != 0) {
+      throw new IllegalArgumentException("Número de times deve ser par para eliminatórias");
     }
+    if ((teamCount & (teamCount - 1)) != 0) {
+      throw new IllegalArgumentException("Número de times deve ser potência de 2 (4, 8, 16...)");
+    }
+
     List<GeneratedTeam> sortedTeams = generatedTeams.stream()
             .sorted(Comparator.comparingDouble(this::calculateTeamAverageScore).reversed())
             .toList();
 
+    // Determina a primeira fase
+    int numMatches = teamCount / 2;
+    String firstStage = getInitialKnockoutStage(teamCount);
+
+    // Cria os ChampionshipTeam (se ainda não existirem)
+    for (GeneratedTeam gt : sortedTeams) {
+      ChampionshipTeam ct = new ChampionshipTeam();
+      ct.setChampionshipId(championship.getId());
+      ct.setTeamIndex(gt.getTeamIndex());
+      ct.setName(teamNames != null && teamNames.containsKey(gt.getTeamIndex())
+              ? teamNames.get(gt.getTeamIndex())
+              : "Time " + gt.getTeamIndex());
+      championshipTeamRepository.save(ct);
+    }
+
+    // Cria as partidas da primeira rodada
     int round = 1;
-    for (int i = 0; i < sortedTeams.size() / 2; i++) {
+    for (int i = 0; i < numMatches; i++) {
       GeneratedTeam teamA = sortedTeams.get(i);
-      GeneratedTeam teamB = sortedTeams.get(sortedTeams.size() - 1 - i);
+      GeneratedTeam teamB = sortedTeams.get(teamCount - 1 - i);
+
       ChampionshipMatch match = new ChampionshipMatch();
       match.setChampionshipId(championship.getId());
-      match.setRound(round);
+      match.setStage(firstStage);
+      match.setRound(round++);
       match.setHomeTeamIndex(teamA.getTeamIndex());
       match.setAwayTeamIndex(teamB.getTeamIndex());
+      match.setStatus("pending");
+
+      // Herda configurações do campeonato
+      match.setSetsToWin(championship.getDefaultSetsToWin());
+      match.setPointsPerSet(championship.getDefaultPointsPerSet());
+      match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
+
       championshipMatchRepository.save(match);
-      round++;
     }
+  }
+
+  private String getInitialKnockoutStage(int teamCount) {
+    if (teamCount == 2) return "FINAL";
+    if (teamCount == 4) return "SEMI";
+    return "QUARTER";
   }
 
   private void createLeagueFormat(Championship championship, List<GeneratedTeam> generatedTeams,
@@ -635,6 +677,9 @@ public class ChampionshipService {
       match.setHomeTeamIndex(winners.get(i));
       match.setAwayTeamIndex(winners.get(i + 1));
       match.setStatus("pending");
+      match.setSetsToWin(championship.getDefaultSetsToWin());
+      match.setPointsPerSet(championship.getDefaultPointsPerSet());
+      match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
       nextMatches.add(match);
     }
 
@@ -654,8 +699,14 @@ public class ChampionshipService {
       championshipMatchRepository.deleteAll(existingKnockout);
     }
 
+    // Se for KNOCKOUT puro, não gera a primeira fase aqui (já foi criada no createKnockoutFormat)
+    if ("KNOCKOUT".equals(championship.getFormat())) {
+      return;
+    }
+
+    // Para GROUPS e LEAGUE: busca classificação dos grupos
     List<ChampionshipStandings> standings = standingsRepository
-            .findByChampionshipIdOrderByGroupIndexAscPointsDescGoalsDifferenceDescGoalsForAsc(championshipId);
+            .findByChampionshipIdOrderByGroupIndexAscPointsDescSetsDifferenceDescGoalsDifferenceDescGoalsForAsc(championshipId);
     Map<Integer, List<ChampionshipStandings>> groups = standings.stream()
             .filter(s -> s.getGroupIndex() != null)
             .collect(Collectors.groupingBy(ChampionshipStandings::getGroupIndex));
@@ -663,6 +714,7 @@ public class ChampionshipService {
     int groupsCount = championship.getGroupsCount();
     int qualifiedPerGroup = championship.getQualifiedPerGroup();
 
+    // Coleta os classificados por grupo
     List<List<ChampionshipStandings>> qualifiedByGroup = new ArrayList<>();
     for (int g = 1; g <= groupsCount; g++) {
       List<ChampionshipStandings> groupStandings = groups.get(g);
@@ -675,17 +727,19 @@ public class ChampionshipService {
 
     int totalQualified = qualifiedByGroup.stream().mapToInt(List::size).sum();
 
+    // Validação: número de classificados deve ser potência de 2
     if (totalQualified < 2 || (totalQualified & (totalQualified - 1)) != 0) {
       throw new IllegalStateException(
               "Número de classificados (" + totalQualified + ") não é potência de 2. " +
                       "Impossível gerar chaveamento eliminatório padrão.");
     }
 
+    // Define a primeira fase do mata‑mata
     String firstStage;
-    if (totalQualified == 4) {
-      firstStage = "SEMI";
-    } else if (totalQualified == 2) {
+    if (totalQualified == 2) {
       firstStage = "FINAL";
+    } else if (totalQualified == 4) {
+      firstStage = "SEMI";
     } else {
       firstStage = "QUARTER";
     }
@@ -695,33 +749,26 @@ public class ChampionshipService {
             .mapToInt(ChampionshipMatch::getRound)
             .max().orElse(0) + 1;
 
+    // ========== GERAÇÃO DOS CONFRONTOS ==========
     if (totalQualified == 2) {
-      // Final direta (apenas 2 times)
+      // Final direta (apenas 2 times classificados)
       List<ChampionshipStandings> allQualified = qualifiedByGroup.stream()
               .flatMap(List::stream)
+              .sorted(Comparator.comparingInt(ChampionshipStandings::getPoints).reversed()
+                      .thenComparingInt(ChampionshipStandings::getSetsDifference).reversed()
+                      .thenComparingInt(ChampionshipStandings::getGoalsDifference).reversed())
               .collect(Collectors.toList());
 
       if (allQualified.size() == 2) {
         ChampionshipStandings home = allQualified.get(0);
         ChampionshipStandings away = allQualified.get(1);
 
-        ChampionshipMatch match = new ChampionshipMatch();
-        match.setChampionshipId(championshipId);
-        match.setStage(firstStage); // "FINAL"
-        match.setRound(round);
-        match.setHomeTeamIndex(home.getTeamIndex());
-        match.setAwayTeamIndex(away.getTeamIndex());
-        match.setStatus("pending");
-
-        // Herda configurações do campeonato
-        match.setSetsToWin(championship.getDefaultSetsToWin());
-        match.setPointsPerSet(championship.getDefaultPointsPerSet());
-        match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
-
+        ChampionshipMatch match = createKnockoutMatch(championship, firstStage, round,
+                home.getTeamIndex(), away.getTeamIndex());
         knockoutMatches.add(match);
       }
     } else {
-      // Chaveamento normal (4, 8, 16... times)
+      // Chaveamento cruzado entre grupos adjacentes (4, 8, 16... times)
       for (int i = 0; i < qualifiedByGroup.size(); i += 2) {
         if (i + 1 >= qualifiedByGroup.size()) break;
 
@@ -733,20 +780,10 @@ public class ChampionshipService {
           ChampionshipStandings home = groupA.get(j);
           ChampionshipStandings away = groupB.get(qualSize - 1 - j);
 
-          ChampionshipMatch match = new ChampionshipMatch();
-          match.setChampionshipId(championshipId);
-          match.setStage(firstStage);
-          match.setRound(round++);
-          match.setHomeTeamIndex(home.getTeamIndex());
-          match.setAwayTeamIndex(away.getTeamIndex());
-          match.setStatus("pending");
-
-          // Herda configurações do campeonato
-          match.setSetsToWin(championship.getDefaultSetsToWin());
-          match.setPointsPerSet(championship.getDefaultPointsPerSet());
-          match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
-
+          ChampionshipMatch match = createKnockoutMatch(championship, firstStage, round,
+                  home.getTeamIndex(), away.getTeamIndex());
           knockoutMatches.add(match);
+          round++;
         }
       }
     }
@@ -756,6 +793,25 @@ public class ChampionshipService {
     }
 
     championshipMatchRepository.saveAll(knockoutMatches);
+  }
+
+  // Método auxiliar para criar uma partida eliminatória com herança de configurações
+  private ChampionshipMatch createKnockoutMatch(Championship championship, String stage, int round,
+                                                int homeTeamIndex, int awayTeamIndex) {
+    ChampionshipMatch match = new ChampionshipMatch();
+    match.setChampionshipId(championship.getId());
+    match.setStage(stage);
+    match.setRound(round);
+    match.setHomeTeamIndex(homeTeamIndex);
+    match.setAwayTeamIndex(awayTeamIndex);
+    match.setStatus("pending");
+
+    // Herda configurações de sets do campeonato
+    match.setSetsToWin(championship.getDefaultSetsToWin());
+    match.setPointsPerSet(championship.getDefaultPointsPerSet());
+    match.setTieBreakPoints(championship.getDefaultTieBreakPoints());
+
+    return match;
   }
 
   @Transactional
