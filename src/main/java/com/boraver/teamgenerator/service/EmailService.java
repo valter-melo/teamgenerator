@@ -10,10 +10,10 @@ public class EmailService {
 
   private final JavaMailSender mailSender;
 
-  @Value("${app.email.from:contato@rando.esp.br}")
+  @Value("${app.email.from:noreply@rando.esp.br}")
   private String fromEmail;
 
-  @Value("${app.email.verification-url:https://rando.esp.com/verify}")
+  @Value("${app.email.verification-url:http://localhost:5173/verify}")
   private String verificationUrl;
 
   public EmailService(JavaMailSender mailSender) {

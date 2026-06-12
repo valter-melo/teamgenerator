@@ -1,6 +1,7 @@
 package com.boraver.teamgenerator.controller;
 
 import com.boraver.teamgenerator.dto.auth.*;
+import com.boraver.teamgenerator.dto.email.VerifyEmailRequest;
 import com.boraver.teamgenerator.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -71,14 +72,14 @@ public class AuthController {
     return buildAuthResponse(result);
   }
 
-  @GetMapping("/verify-email")
+  @PostMapping("/verify-email")
   @Operation(summary = "Verificar e‑mail do usuário")
   @ApiResponses(value = {
           @ApiResponse(responseCode = "200", description = "E‑mail verificado com sucesso"),
           @ApiResponse(responseCode = "400", description = "Token inválido ou expirado")
   })
-  public ResponseEntity<String> verifyEmail(@RequestParam String token) {
-    authService.verifyEmail(token);
+  public ResponseEntity<String> verifyEmailAndSetPassword(@Valid @RequestBody VerifyEmailRequest req) {
+    authService.verifyEmailAndSetPassword(req.token(), req.password());
     return ResponseEntity.ok("E‑mail verificado com sucesso! Você já pode fechar esta página e fazer login.");
   }
 

@@ -143,9 +143,8 @@ public class AuthService {
     return login(tenant.getId(), email, password);
   }
 
-  // No AuthService.java
   @Transactional
-  public void verifyEmail(String token) {
+  public void verifyEmailAndSetPassword(String token, String password) {
     AppUser user = userRepo.findByEmailVerificationToken(token)
             .orElseThrow(() -> new IllegalArgumentException("Token de verificação inválido"));
 
@@ -154,16 +153,20 @@ public class AuthService {
       throw new IllegalArgumentException("Token de verificação expirado");
     }
 
+    if (password == null || password.length() < 6) {
+      throw new IllegalArgumentException("Senha deve ter no mínimo 6 caracteres");
+    }
+
     user.setEmailVerified(true);
+    user.setPasswordHash(encoder.encode(password));
     user.setEmailVerificationToken(null);
     user.setEmailVerificationTokenExpiry(null);
     userRepo.save(user);
 
-    // ✅ AQUI: Enviar e-mail de boas-vindas após a verificação bem-sucedida
+    // Envia e-mail de boas-vindas (opcional)
     try {
       emailService.sendWelcomeEmail(user.getEmail(), user.getName());
     } catch (Exception e) {
-      // Apenas loga o erro; não impede a conclusão da verificação
       System.err.println("Erro ao enviar e-mail de boas-vindas: " + e.getMessage());
     }
   }
