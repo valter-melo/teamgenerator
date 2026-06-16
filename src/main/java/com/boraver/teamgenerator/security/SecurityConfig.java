@@ -41,7 +41,8 @@ public class SecurityConfig {
           "/v3/api-docs/**",
           "/swagger-ui/**",
           "/swagger-ui.html",
-          "/uploads/**"
+          "/uploads/**",
+          "/webhooks/**"
         ).permitAll()
         .requestMatchers(HttpMethod.GET, "/championships/*/stream").permitAll()
         .anyRequest().authenticated()

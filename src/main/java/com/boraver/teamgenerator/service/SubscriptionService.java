@@ -5,6 +5,7 @@ import com.boraver.teamgenerator.dto.subscription.CheckoutResponseDTO;
 import com.boraver.teamgenerator.dto.subscription.SubscribeRequestDTO;
 import com.boraver.teamgenerator.dto.subscription.SubscriptionStatusDTO;
 import com.boraver.teamgenerator.entity.*;
+import com.boraver.teamgenerator.entity.Subscription.SubscriptionStatus;
 import com.boraver.teamgenerator.repository.AppUserRepository;
 import com.boraver.teamgenerator.repository.PlanRepository;
 import com.boraver.teamgenerator.repository.SubscriptionRepository;
@@ -38,135 +39,120 @@ public class SubscriptionService {
     this.asaasService = asaasService;
   }
 
+  // ─── Upgrade de plano ───
+
   @Transactional
   public CheckoutResponseDTO subscribe(SubscribeRequestDTO request) {
     UUID tenantId = getTenantId();
     Tenant tenant = tenantRepo.findById(tenantId)
-      .orElseThrow(() -> new RuntimeException("Tenant não encontrado"));
-    Plan plan = planRepo.findById(request.planId())
-      .orElseThrow(() -> new RuntimeException("Plano não encontrado"));
+            .orElseThrow(() -> new RuntimeException("Tenant não encontrado"));
+    Plan newPlan = planRepo.findById(request.planId())
+            .orElseThrow(() -> new RuntimeException("Plano não encontrado"));
     AppUser adminUser = appUserRepository.findFirstByTenantIdAndRole(tenantId, "ADMIN")
-      .orElseThrow(() -> new RuntimeException("Admin não encontrado"));
+            .orElseThrow(() -> new RuntimeException("Admin não encontrado"));
 
-    // Verifica/cancela assinatura existente (omitido para brevidade, mas mantenha o seu código)
+    // Busca assinatura ativa atual
+    Subscription currentSub = subscriptionRepo
+            .findByTenantIdAndStatus(tenantId, SubscriptionStatus.ACTIVE)
+            .orElse(null);
 
-    String customerId = asaasService.getOrCreateCustomer(adminUser);
-    Map<String, Object> asaasSub = asaasService.createSubscription(customerId, plan, tenantId);
+    String customerId;
 
-    // Log para debug
-    System.out.println("Resposta da criação de assinatura Asaas: " + asaasSub);
+    if (currentSub != null) {
+      // Verifica se é o mesmo plano
+      if (currentSub.getPlan().getId().equals(newPlan.getId())) {
+        throw new RuntimeException("Você já está neste plano!");
+      }
 
-    // Salva a assinatura local primeiro, mas precisamos do paymentId
+      // Só permite upgrade (plano mais caro)
+      if (newPlan.getPrice().compareTo(currentSub.getPlan().getPrice()) <= 0) {
+        throw new RuntimeException(
+                "Downgrade não é permitido manualmente. " +
+                        "Seu plano será alterado automaticamente para Free ao final do ciclo " +
+                        "caso não haja renovação."
+        );
+      }
+
+      // Upgrade: cancela assinatura atual no Asaas
+      if (currentSub.getAsaasSubscriptionId() != null &&
+              !currentSub.getAsaasSubscriptionId().isBlank()) {
+        try {
+          asaasService.cancelSubscription(currentSub.getAsaasSubscriptionId());
+        } catch (Exception e) {
+          System.err.println("Erro ao cancelar assinatura anterior no Asaas: " + e.getMessage());
+        }
+      }
+      currentSub.setStatus(SubscriptionStatus.CANCELLED);
+      subscriptionRepo.save(currentSub);
+
+      // Reutiliza customerId
+      customerId = currentSub.getAsaasCustomerId();
+    } else {
+      // Primeira assinatura: cria customer novo
+      customerId = asaasService.getOrCreateCustomer(adminUser);
+    }
+
+    // Cria nova assinatura no Asaas (vencimento hoje + 30 dias)
+    Map<String, Object> asaasSub = asaasService.createSubscription(customerId, newPlan, tenantId);
+
+    // Salva local
     Subscription sub = new Subscription();
     sub.setTenant(tenant);
-    sub.setPlan(plan);
-    sub.setStatus(Subscription.SubscriptionStatus.PENDING);
+    sub.setPlan(newPlan);
+    sub.setStatus(SubscriptionStatus.PENDING);
     sub.setStartDate(LocalDate.now());
     sub.setEndDate(null);
     sub.setAsaasSubscriptionId((String) asaasSub.get("id"));
     sub.setAsaasCustomerId(customerId);
     subscriptionRepo.save(sub);
 
-    // ─── Obtém detalhes da primeira cobrança ───
-    String paymentId = null;
-    String bankSlipUrl = null;
-    String pixUrl = null;
-
-    Object firstPaymentObj = asaasSub.get("firstPayment");
-    if (firstPaymentObj instanceof Map) {
-      Map<String, Object> firstPayment = (Map<String, Object>) firstPaymentObj;
-      paymentId = (String) firstPayment.get("id");
-    } else if (asaasSub.get("firstPaymentId") != null) {
-      // Caso venha apenas o ID (comportamento antigo ou diferente)
-      paymentId = asaasSub.get("firstPaymentId").toString();
-    }
-
-    if (paymentId == null) {
-      // Fallback: busca os pagamentos da assinatura e pega o primeiro
-      Map<String, Object> paymentsData = asaasService.getPaymentsBySubscription((String) asaasSub.get("id"));
-      List<Map<String, Object>> paymentList = (List<Map<String, Object>>) paymentsData.get("data");
-      if (paymentList != null && !paymentList.isEmpty()) {
-        paymentId = (String) paymentList.get(0).get("id");
-      } else {
-        throw new RuntimeException("Nenhum pagamento encontrado para a assinatura");
-      }
-    }
-
-    // Com o paymentId, busca detalhes completos
+    // Obtém detalhes da primeira cobrança
+    String paymentId = extractPaymentId(asaasSub);
     Map<String, Object> paymentDetails = asaasService.getPaymentDetails(paymentId);
-    bankSlipUrl = (String) paymentDetails.get("bankSlipUrl");
-    pixUrl = (String) paymentDetails.get("pixUrl");
+
+    String invoiceUrl = (String) paymentDetails.get("invoiceUrl");
+    String bankSlipUrl = (String) paymentDetails.get("bankSlipUrl");
+    String pixUrl = (String) paymentDetails.get("pixUrl");
 
     return new CheckoutResponseDTO(
-      sub.getId(),
-      sub.getStatus().name(),
-      bankSlipUrl,
-      pixUrl
+            sub.getId(),
+            sub.getStatus().name(),
+            bankSlipUrl,
+            pixUrl,
+            invoiceUrl  // ← novo campo
     );
   }
 
-  @Transactional
-  public CheckoutResponseDTO downgrade(SubscribeRequestDTO request) {
-    UUID tenantId = getTenantId();
-    Plan newPlan = planRepo.findById(request.planId())
-            .orElseThrow(() -> new RuntimeException("Plano não encontrado"));
-
-    // Busca assinatura ativa atual
-    Subscription currentSub = subscriptionRepo
-            .findByTenantIdAndStatus(tenantId, Subscription.SubscriptionStatus.ACTIVE)
-            .orElseThrow(() -> new RuntimeException("Nenhuma assinatura ativa encontrada"));
-
-    // Verifica se é realmente downgrade (preço menor)
-    if (newPlan.getPrice().compareTo(currentSub.getPlan().getPrice()) >= 0) {
-      throw new RuntimeException("Use o endpoint de upgrade para mudar para um plano superior");
-    }
-
-    // Cancela assinatura atual no Asaas
-    asaasService.cancelSubscription(currentSub.getAsaasSubscriptionId());
-    currentSub.setStatus(Subscription.SubscriptionStatus.CANCELLED);
-    subscriptionRepo.save(currentSub);
-
-    // Cria nova assinatura com o plano inferior (já ativa, sem cobrança imediata)
-    String customerId = currentSub.getAsaasCustomerId();
-    Map<String, Object> asaasSub = asaasService.createSubscription(customerId, newPlan, tenantId);
-
-    Subscription newSub = new Subscription();
-    newSub.setTenant(currentSub.getTenant());   // mesmo tenant
-    newSub.setPlan(newPlan);
-    newSub.setStatus(Subscription.SubscriptionStatus.ACTIVE);
-    newSub.setStartDate(LocalDate.now());
-    newSub.setEndDate(null);
-    newSub.setAsaasSubscriptionId((String) asaasSub.get("id"));
-    newSub.setAsaasCustomerId(customerId);
-    subscriptionRepo.save(newSub);
-
-    return new CheckoutResponseDTO(
-            newSub.getId(),
-            newSub.getStatus().name(),
-            null,
-            null
-    );
-  }
+  // ─── Status da assinatura ───
 
   public SubscriptionStatusDTO getSubscriptionStatus() {
     UUID tenantId = getTenantId();
-
     Subscription sub = subscriptionRepo
             .findFirstByTenantIdAndStatusNotOrderByStartDateDesc(
-                    tenantId, Subscription.SubscriptionStatus.CANCELLED)
+                    tenantId, SubscriptionStatus.CANCELLED)
             .orElse(null);
 
-    if (sub == null || sub.getStatus() == Subscription.SubscriptionStatus.PENDING) {
-      return new SubscriptionStatusDTO(false, null, "Nenhuma assinatura ativa");
+    // Se não tem assinatura ou está PENDING, retorna Free
+    if (sub == null || sub.getStatus() == SubscriptionStatus.PENDING) {
+      Plan freePlan = planRepo.findByName("Free").orElse(null);
+      List<String> features = freePlan != null ? freePlan.getFeatureList() : List.of();
+      return new SubscriptionStatusDTO(false, "Free", "Nenhuma assinatura ativa", features);
     }
 
-    boolean active = sub.getStatus() == Subscription.SubscriptionStatus.ACTIVE;
+    boolean active = sub.getStatus() == SubscriptionStatus.ACTIVE;
     String message = active
             ? "Sua assinatura está ativa"
             : "Assinatura suspensa por falta de pagamento";
 
-    return new SubscriptionStatusDTO(active, sub.getPlan().getName(), message);
+    return new SubscriptionStatusDTO(
+            active,
+            sub.getPlan().getName(),
+            message,
+            sub.getPlan().getFeatureList()
+    );
   }
+
+  // ─── Métodos auxiliares ───
 
   private UUID getTenantId() {
     String tenantIdStr = TenantContext.getTenantId();
@@ -174,5 +160,26 @@ public class SubscriptionService {
       throw new IllegalStateException("Tenant não encontrado no contexto");
     }
     return UUID.fromString(tenantIdStr);
+  }
+
+  private String extractPaymentId(Map<String, Object> asaasSub) {
+    // Tenta pegar firstPayment
+    Object firstPaymentObj = asaasSub.get("firstPayment");
+    if (firstPaymentObj instanceof Map) {
+      Map<String, Object> firstPayment = (Map<String, Object>) firstPaymentObj;
+      return (String) firstPayment.get("id");
+    }
+    // Tenta firstPaymentId
+    if (asaasSub.get("firstPaymentId") != null) {
+      return asaasSub.get("firstPaymentId").toString();
+    }
+    // Fallback: busca pagamentos da assinatura
+    Map<String, Object> paymentsData = asaasService.getPaymentsBySubscription(
+            (String) asaasSub.get("id"));
+    List<Map<String, Object>> paymentList = (List<Map<String, Object>>) paymentsData.get("data");
+    if (paymentList != null && !paymentList.isEmpty()) {
+      return (String) paymentList.get(0).get("id");
+    }
+    throw new RuntimeException("Nenhum pagamento encontrado para a assinatura");
   }
 }

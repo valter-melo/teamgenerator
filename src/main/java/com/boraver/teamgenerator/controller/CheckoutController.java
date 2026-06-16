@@ -22,11 +22,6 @@ public class CheckoutController {
     return ResponseEntity.ok(subscriptionService.subscribe(request));
   }
 
-  @PostMapping("/downgrade")
-  public ResponseEntity<CheckoutResponseDTO> downgrade(@RequestBody SubscribeRequestDTO request) {
-    return ResponseEntity.ok(subscriptionService.downgrade(request));
-  }
-
   @GetMapping("/status")
   public ResponseEntity<SubscriptionStatusDTO> status() {
     return ResponseEntity.ok(subscriptionService.getSubscriptionStatus());

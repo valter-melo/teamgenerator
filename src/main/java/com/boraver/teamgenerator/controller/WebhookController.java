@@ -20,10 +20,12 @@ public class WebhookController {
   }
 
   @PostMapping("/asaas")
-  public ResponseEntity<String> handle(
-    @RequestBody Map<String, Object> payload,
-    @RequestHeader("asaas-access-token") String token) {
-    if (!secret.equals(token)) return ResponseEntity.status(403).body("Token inválido");
+  public ResponseEntity<String> handle(@RequestBody Map<String, Object> payload,
+                                       @RequestHeader("asaas-access-token") String token) {
+    if (!secret.equals(token)) {
+      return ResponseEntity.status(403).body("Token inválido");
+    }
+
     webhookService.processAsaasEvent(payload);
     return ResponseEntity.ok("OK");
   }

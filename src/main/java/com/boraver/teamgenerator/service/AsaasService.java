@@ -85,6 +85,24 @@ public class AsaasService {
     return resp.getBody();
   }
 
+  public String createPaymentLink(String subscriptionId) {
+    // Busca os pagamentos da assinatura
+    Map<String, Object> paymentsData = getPaymentsBySubscription(subscriptionId);
+    List<Map<String, Object>> paymentList = (List<Map<String, Object>>) paymentsData.get("data");
+
+    if (paymentList == null || paymentList.isEmpty()) {
+      throw new RuntimeException("Nenhum pagamento encontrado");
+    }
+
+    String paymentId = (String) paymentList.get(0).get("id");
+
+    // Busca o link de pagamento público (invoiceUrl)
+    Map<String, Object> paymentDetails = getPaymentDetails(paymentId);
+    String invoiceUrl = (String) paymentDetails.get("invoiceUrl");
+
+    return invoiceUrl;
+  }
+
   public Map<String, Object> getPaymentDetails(String paymentId) {
     ResponseEntity<Map<String, Object>> resp = asaasRestTemplate.exchange(
             config.getBaseUrl() + "/payments/" + paymentId,
