@@ -53,7 +53,7 @@ public class SkillService {
 
   @Transactional
   public void delete(UUID id) {
-    skillRepository.deleteById(id);
+    skillRepository.softDelete(id);
   }
 
   public long countActive(UUID tenantId) {

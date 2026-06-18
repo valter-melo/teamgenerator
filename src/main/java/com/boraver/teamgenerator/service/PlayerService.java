@@ -133,7 +133,7 @@ public class PlayerService {
 
   @Transactional
   public void delete(UUID id) {
-    playerRepository.deleteById(id);
+    playerRepository.softDelete(id);
   }
 
   private PlayerResponse toResponse(Player p) {

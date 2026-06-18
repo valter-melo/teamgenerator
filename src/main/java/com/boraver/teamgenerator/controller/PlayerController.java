@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -47,8 +48,9 @@ public class PlayerController {
 
   @Operation(summary = "Excluir jogador")
   @DeleteMapping("/{id}")
-  public void delete(@PathVariable UUID id) {
+  public ResponseEntity<Void> delete(@PathVariable UUID id) {
     playerService.delete(id);
+    return ResponseEntity.noContent().build();
   }
 
   @GetMapping("/performance")

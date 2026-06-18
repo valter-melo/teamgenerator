@@ -58,7 +58,7 @@ public class PositionService {
 
   @Transactional
   public void delete(UUID id) {
-    repository.deleteById(id);
+    repository.softDelete(id);
   }
 
   public long countActive(UUID tenantId) {

@@ -119,7 +119,7 @@ public class SubscriptionService {
             sub.getStatus().name(),
             bankSlipUrl,
             pixUrl,
-            invoiceUrl  // ← novo campo
+            invoiceUrl
     );
   }
 

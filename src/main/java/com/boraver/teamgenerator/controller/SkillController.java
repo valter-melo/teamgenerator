@@ -3,6 +3,7 @@ package com.boraver.teamgenerator.controller;
 import com.boraver.teamgenerator.dto.skill.*;
 import com.boraver.teamgenerator.service.SkillService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -36,7 +37,8 @@ public class SkillController {
   }
 
   @DeleteMapping("/{id}")
-  public void delete(@PathVariable UUID id) {
+  public ResponseEntity<Void> delete(@PathVariable UUID id) {
     service.delete(id);
+    return ResponseEntity.noContent().build();
   }
 }

@@ -5,6 +5,7 @@ import com.boraver.teamgenerator.entity.*;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -40,4 +41,9 @@ public interface PlayerRepository extends JpaRepository<Player, UUID> {
     ORDER BY p.name
   """)
   List<Player> findAllActiveWithPositions(@Param("tenantId") UUID tenantId);
+
+  @Query("UPDATE Player p SET p.active = false WHERE p.id = :id")
+  @Modifying
+  @Transactional
+  void softDelete(@Param("id") UUID id);
 }

@@ -3,6 +3,7 @@ package com.boraver.teamgenerator.controller;
 import com.boraver.teamgenerator.dto.position.*;
 import com.boraver.teamgenerator.service.PositionService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,7 +39,8 @@ public class PositionController {
   }
 
   @DeleteMapping("/{id}")
-  public void delete(@PathVariable UUID id) {
+  public ResponseEntity<Void> delete(@PathVariable UUID id) {
     service.delete(id);
+    return ResponseEntity.noContent().build();
   }
 }
