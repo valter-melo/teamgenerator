@@ -78,6 +78,14 @@ public class GameSessionController {
     return ResponseEntity.ok(friendlySessionService.getFriendlySessionDetails(tenantId, sessionId));
   }
 
+  @GetMapping("/current")
+  public ResponseEntity<FriendlySessionDTO> getCurrentSession() {
+    UUID tenantId = UUID.fromString(TenantContext.getTenantId());
+    return friendlySessionService.getCurrentSession(tenantId)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.noContent().build());
+  }
+
   @PostMapping("/{sessionId}/matches")
   public ResponseEntity<Map<String, String>> registerMatch(
           @PathVariable UUID sessionId,

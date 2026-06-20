@@ -6,18 +6,32 @@ import java.util.UUID;
 public record FriendlySessionDTO(
         UUID sessionId,
         String dateFormatted,
-        List<CourtDTO> courts
+        List<CourtDTO> courts,
+        int pointsPerSet,
+        int setsToWin
 ) {
   public record CourtDTO(
           String name,
-          List<TeamInfo> teams
+          List<TeamInfo> teams,
+          List<MatchInfo> matches    // ← novo
   ) {}
 
   public record TeamInfo(
           int teamIndex,
           String teamName,
-          double avgRating,
-          int womenCount,
+          double avgScore,
+          int women,
           List<String> playerNames
+  ) {}
+
+  public record MatchInfo(
+         String homeTeamName,
+         String awayTeamName,
+         int homeTeamIndex,
+         int awayTeamIndex,
+         int homeScore,
+         int awayScore,
+         Integer winnerTeamIndex,
+         boolean walkover
   ) {}
 }

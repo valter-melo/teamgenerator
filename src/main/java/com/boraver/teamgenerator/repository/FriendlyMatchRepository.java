@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public interface FriendlyMatchRepository extends JpaRepository<FriendlyMatch, UUID> {
   List<FriendlyMatch> findAllBySessionIdOrderByCreatedAtAsc(UUID sessionId);
+  List<FriendlyMatch> findBySessionIdOrderByCreatedAt(UUID sessionId);
 }

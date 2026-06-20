@@ -17,4 +17,6 @@ public interface GeneratedTeamPlayerRepository extends JpaRepository<GeneratedTe
   List<GeneratedTeamPlayer> findByTeamId(UUID teamId);
 
   Optional<GeneratedTeamPlayer> findByTeamIdAndPlayerId(UUID teamId, UUID playerId);
+
+  List<GeneratedTeamPlayer> findByTeamIdIn(List<UUID> teamIds);
 }
