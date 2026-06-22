@@ -19,7 +19,7 @@ public record ChampionshipDetailsResponse(
     String matchesType,
     String status,
     List<GroupDetails> groups,
-    List<MatchDetails> matches // todas as partidas? talvez só as do grupo?
+    List<MatchDetails> matches
 ) {
   public record GroupDetails(
       int groupIndex,
